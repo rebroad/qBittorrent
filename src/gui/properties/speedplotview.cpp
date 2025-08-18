@@ -250,9 +250,40 @@ void SpeedPlotView::setPeriod(const TimePeriod period)
     viewport()->update();
 }
 
+void SpeedPlotView::setLogarithmicScale(bool enabled)
+{
+    if (m_logarithmicScale != enabled)
+    {
+        m_logarithmicScale = enabled;
+        viewport()->update();
+    }
+}
+
 const SpeedPlotView::DataCircularBuffer &SpeedPlotView::currentData() const
 {
     return m_currentAverager->data();
+}
+
+qreal SpeedPlotView::calculateYValue(const qreal value, const qreal maxValue, const int height) const
+{
+    if ((height <= 0) || (maxValue <= 0.0) || (value <= 0.0))
+        return 0.0;
+
+    qreal result;
+    if (m_logarithmicScale)
+        result = std::log1p(value) / std::log1p(maxValue);
+    else
+        result = value / maxValue;
+
+    if (!std::isfinite(result))
+        return 0.0;
+
+    const qreal scaledHeight = height * result;
+    if (scaledHeight <= 0.0)
+        return 0.0;
+    if (scaledHeight >= height)
+        return height;
+    return scaledHeight;
 }
 
 quint64 SpeedPlotView::maxYValue() const
@@ -292,28 +323,25 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
     rect.adjust(0, fontMetrics.height(), 0, 0); // Add top padding for top speed text
 
     // draw Y axis speed labels
-    const QList<QString> speedLabels =
-    {
-        formatLabel(niceScale.arg, niceScale.unit),
-        formatLabel((0.75 * niceScale.arg), niceScale.unit),
-        formatLabel((0.50 * niceScale.arg), niceScale.unit),
-        formatLabel((0.25 * niceScale.arg), niceScale.unit),
-        formatLabel(0.0, niceScale.unit),
-    };
+    const qreal scaleMaxValue = niceScale.sizeInBytes();
+    const QList<qreal> speedLabelValues = m_logarithmicScale
+        ? QList<qreal> {niceScale.arg, niceScale.arg * 0.1, niceScale.arg * 0.01, niceScale.arg * 0.001, 0.0}
+        : QList<qreal> {niceScale.arg, niceScale.arg * 0.75, niceScale.arg * 0.50, niceScale.arg * 0.25, 0.0};
 
     int yAxisWidth = 0;
-    for (const QString &label : speedLabels)
+    for (const qreal labelValue : speedLabelValues)
     {
-        if (fontMetrics.horizontalAdvance(label) > yAxisWidth)
-            yAxisWidth = fontMetrics.horizontalAdvance(label);
+        const QString label = formatLabel(labelValue, niceScale.unit);
+        yAxisWidth = std::max(yAxisWidth, fontMetrics.horizontalAdvance(label));
     }
 
-    int i = 0;
-    for (const QString &label : speedLabels)
+    for (const qreal labelValue : speedLabelValues)
     {
-        QRectF labelRect(rect.topLeft() + QPointF(-yAxisWidth, (i++) * 0.25 * rect.height() - fontMetrics.height()),
-                         QSizeF(2 * yAxisWidth, fontMetrics.height()));
-        painter.drawText(labelRect, label, Qt::AlignRight | Qt::AlignTop);
+        const qreal labelBytes = Utils::Misc::sizeInBytes(labelValue, niceScale.unit);
+        const qreal labelOffset = calculateYValue(labelBytes, scaleMaxValue, rect.height());
+        const qreal labelY = rect.bottom() - labelOffset - 0.5 * fontMetrics.height();
+        QRectF labelRect(rect.left() - yAxisWidth, labelY, 2 * yAxisWidth, fontMetrics.height());
+        painter.drawText(labelRect, formatLabel(labelValue, niceScale.unit), Qt::AlignRight | Qt::AlignVCenter);
     }
 
     // draw grid lines
@@ -325,11 +353,13 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
     gridPen.setColor(QColor(128, 128, 128, 128));
     painter.setPen(gridPen);
 
-    painter.drawLine(fullRect.left(), rect.top(), rect.right(), rect.top());
-    painter.drawLine(fullRect.left(), rect.top() + 0.25 * rect.height(), rect.right(), rect.top() + 0.25 * rect.height());
-    painter.drawLine(fullRect.left(), rect.top() + 0.50 * rect.height(), rect.right(), rect.top() + 0.50 * rect.height());
-    painter.drawLine(fullRect.left(), rect.top() + 0.75 * rect.height(), rect.right(), rect.top() + 0.75 * rect.height());
-    painter.drawLine(fullRect.left(), rect.bottom(), rect.right(), rect.bottom());
+    for (const qreal labelValue : speedLabelValues)
+    {
+        const qreal labelBytes = Utils::Misc::sizeInBytes(labelValue, niceScale.unit);
+        const qreal labelOffset = calculateYValue(labelBytes, scaleMaxValue, rect.height());
+        const qreal labelY = rect.bottom() - labelOffset;
+        painter.drawLine(fullRect.left(), labelY, rect.right(), labelY);
+    }
 
     const int TIME_AXIS_DIVISIONS = 6;
     for (int i = 0; i < TIME_AXIS_DIVISIONS; ++i)
@@ -350,8 +380,8 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
 
     // last point will be drawn at x=0, so we don't need it in the calculation of xTickSize
     const milliseconds lastDuration {queue.empty() ? 0ms : queue.back().duration};
-    const qreal xTickSize = static_cast<qreal>(rect.width()) / (m_currentMaxDuration - lastDuration).count();
-    const qreal yMultiplier = (niceScale.arg == 0) ? 0 : (static_cast<qreal>(rect.height()) / niceScale.sizeInBytes());
+    const qint64 xDurationCount = std::max<qint64>(1, (m_currentMaxDuration - lastDuration).count());
+    const qreal xTickSize = static_cast<qreal>(rect.width()) / xDurationCount;
 
     for (int id = UP; id < NB_GRAPHS; ++id)
     {
@@ -363,8 +393,8 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
 
         for (int i = static_cast<int>(queue.size()) - 1; i >= 0; --i)
         {
-            const int newX = rect.right() - (duration.count() * xTickSize);
-            const int newY = rect.bottom() - (queue[i].data[id] * yMultiplier);
+            const int newX = qBound(rect.left(), qRound(rect.right() - (duration.count() * xTickSize)), rect.right());
+            const int newY = qBound(rect.top(), qRound(rect.bottom() - calculateYValue(queue[i].data[id], scaleMaxValue, rect.height())), rect.bottom());
             points.push_back(QPoint(newX, newY));
 
             duration += queue[i].duration;
@@ -397,7 +427,7 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
     legendBackgroundColor.setAlpha(128);  // 50% transparent
     painter.fillRect(legendBackgroundRect, legendBackgroundColor);
 
-    i = 0;
+    int i = 0;
     for (const auto &property : asConst(m_properties))
     {
         if (!property.enable)
