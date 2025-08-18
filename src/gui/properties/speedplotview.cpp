@@ -250,9 +250,35 @@ void SpeedPlotView::setPeriod(const TimePeriod period)
     viewport()->update();
 }
 
+void SpeedPlotView::setLogarithmicScale(bool enabled)
+{
+    if (m_logarithmicScale != enabled)
+    {
+        m_logarithmicScale = enabled;
+        viewport()->update();
+    }
+}
+
 const SpeedPlotView::DataCircularBuffer &SpeedPlotView::currentData() const
 {
     return m_currentAverager->data();
+}
+
+int SpeedPlotView::calculateYValue(quint64 value, quint64 maxValue, int height) const
+{
+    if (maxValue <= 0.0001f || value <= std::numeric_limits<float>::epsilon()) 
+        return height;
+    
+    float result;
+    if (m_logarithmicScale)
+        result = pow(value, 0.30102) / pow(maxValue, 0.30102);
+    else
+        result = static_cast<float>(value) / maxValue;
+        
+    if (std::isnan(result) || std::isinf(result)) 
+        return height;
+        
+    return static_cast<int>(height * result);
 }
 
 quint64 SpeedPlotView::maxYValue() const
@@ -292,14 +318,30 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
     rect.adjust(0, fontMetrics.height(), 0, 0); // Add top padding for top speed text
 
     // draw Y axis speed labels
-    const QList<QString> speedLabels =
+    QList<QString> speedLabels;
+    if (m_logarithmicScale)
     {
-        formatLabel(niceScale.arg, niceScale.unit),
-        formatLabel((0.75 * niceScale.arg), niceScale.unit),
-        formatLabel((0.50 * niceScale.arg), niceScale.unit),
-        formatLabel((0.25 * niceScale.arg), niceScale.unit),
-        formatLabel(0.0, niceScale.unit),
-    };
+        // For logarithmic scale, use powers of 10
+        const qreal maxValue = niceScale.sizeInBytes();
+        const qreal minValue = maxValue * 0.01; // Start from 1% of max
+        speedLabels = {
+            formatLabel(niceScale.arg, niceScale.unit),
+            formatLabel(maxValue * 0.1, niceScale.unit),
+            formatLabel(maxValue * 0.01, niceScale.unit),
+            formatLabel(maxValue * 0.001, niceScale.unit),
+            formatLabel(0.0, niceScale.unit),
+        };
+    }
+    else
+    {
+        speedLabels = {
+            formatLabel(niceScale.arg, niceScale.unit),
+            formatLabel((0.75 * niceScale.arg), niceScale.unit),
+            formatLabel((0.50 * niceScale.arg), niceScale.unit),
+            formatLabel((0.25 * niceScale.arg), niceScale.unit),
+            formatLabel(0.0, niceScale.unit),
+        };
+    }
 
     int yAxisWidth = 0;
     for (const QString &label : speedLabels)
@@ -325,11 +367,23 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
     gridPen.setColor(QColor(128, 128, 128, 128));
     painter.setPen(gridPen);
 
-    painter.drawLine(fullRect.left(), rect.top(), rect.right(), rect.top());
-    painter.drawLine(fullRect.left(), rect.top() + 0.25 * rect.height(), rect.right(), rect.top() + 0.25 * rect.height());
-    painter.drawLine(fullRect.left(), rect.top() + 0.50 * rect.height(), rect.right(), rect.top() + 0.50 * rect.height());
-    painter.drawLine(fullRect.left(), rect.top() + 0.75 * rect.height(), rect.right(), rect.top() + 0.75 * rect.height());
-    painter.drawLine(fullRect.left(), rect.bottom(), rect.right(), rect.bottom());
+    if (m_logarithmicScale)
+    {
+        // For logarithmic scale, draw grid lines at logarithmic intervals
+        painter.drawLine(fullRect.left(), rect.top(), rect.right(), rect.top());
+        painter.drawLine(fullRect.left(), rect.top() + 0.25 * rect.height(), rect.right(), rect.top() + 0.25 * rect.height());
+        painter.drawLine(fullRect.left(), rect.top() + 0.50 * rect.height(), rect.right(), rect.top() + 0.50 * rect.height());
+        painter.drawLine(fullRect.left(), rect.top() + 0.75 * rect.height(), rect.right(), rect.top() + 0.75 * rect.height());
+        painter.drawLine(fullRect.left(), rect.bottom(), rect.right(), rect.bottom());
+    }
+    else
+    {
+        painter.drawLine(fullRect.left(), rect.top(), rect.right(), rect.top());
+        painter.drawLine(fullRect.left(), rect.top() + 0.25 * rect.height(), rect.right(), rect.top() + 0.25 * rect.height());
+        painter.drawLine(fullRect.left(), rect.top() + 0.50 * rect.height(), rect.right(), rect.top() + 0.50 * rect.height());
+        painter.drawLine(fullRect.left(), rect.top() + 0.75 * rect.height(), rect.right(), rect.top() + 0.75 * rect.height());
+        painter.drawLine(fullRect.left(), rect.bottom(), rect.right(), rect.bottom());
+    }
 
     const int TIME_AXIS_DIVISIONS = 6;
     for (int i = 0; i < TIME_AXIS_DIVISIONS; ++i)
@@ -364,7 +418,7 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
         for (int i = static_cast<int>(queue.size()) - 1; i >= 0; --i)
         {
             const int newX = rect.right() - (duration.count() * xTickSize);
-            const int newY = rect.bottom() - (queue[i].data[id] * yMultiplier);
+            const int newY = rect.bottom() - calculateYValue(queue[i].data[id], niceScale.sizeInBytes(), rect.height());
             points.push_back(QPoint(newX, newY));
 
             duration += queue[i].duration;

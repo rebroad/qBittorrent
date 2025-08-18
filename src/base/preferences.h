@@ -431,6 +431,8 @@ public:
     void setSpeedWidgetPeriod(int period);
     bool getSpeedWidgetGraphEnable(int id) const;
     void setSpeedWidgetGraphEnable(int id, bool enable);
+    bool getSpeedWidgetLogarithmicScale() const;
+    void setSpeedWidgetLogarithmicScale(bool enabled);
 
     // AddNewTorrentDialog
     bool isAddNewTorrentDialogEnabled() const;

@@ -29,11 +29,13 @@
 #pragma once
 
 #include <QComboBox>
+#include <QPushButton>
 #include <QWidget>
 
 class QHBoxLayout;
 class QLabel;
 class QMenu;
+class QPushButton;
 class QVBoxLayout;
 
 class PropertiesWidget;
@@ -65,6 +67,7 @@ public:
 private slots:
     void onPeriodChange(int period);
     void onGraphChange(int id);
+    void onScaleToggle();
     void update();
 
 private:
@@ -80,4 +83,5 @@ private:
     ComboBoxMenuButton *m_graphsButton = nullptr;
     QMenu *m_graphsMenu = nullptr;
     QList<QAction *> m_graphsMenuActions;
+    QPushButton *m_scaleToggleButton = nullptr;
 };

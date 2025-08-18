@@ -2049,6 +2049,19 @@ void Preferences::setSpeedWidgetGraphEnable(const int id, const bool enable)
     setValue(u"SpeedWidget/graph_enable_%1"_s.arg(id), enable);
 }
 
+bool Preferences::getSpeedWidgetLogarithmicScale() const
+{
+    return value<bool>(u"SpeedWidget/logarithmic_scale"_s, false);
+}
+
+void Preferences::setSpeedWidgetLogarithmicScale(const bool enabled)
+{
+    if (enabled == getSpeedWidgetLogarithmicScale())
+        return;
+
+    setValue(u"SpeedWidget/logarithmic_scale"_s, enabled);
+}
+
 bool Preferences::isAddNewTorrentDialogEnabled() const
 {
     return value(u"AddNewTorrentDialog/Enabled"_s, true);

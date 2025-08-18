@@ -84,6 +84,7 @@ public:
 
     void setGraphEnable(GraphID id, bool enable);
     void setPeriod(TimePeriod period);
+    void setLogarithmicScale(bool enabled);
 
     void pushPoint(const SampleData &point);
 
@@ -130,6 +131,7 @@ private:
 
     quint64 maxYValue() const;
     const DataCircularBuffer &currentData() const;
+    int calculateYValue(quint64 value, quint64 maxValue, int height) const;
 
     Averager m_averager5Min {5min, 1s};
     Averager m_averager30Min {30min, 6s};
@@ -140,4 +142,5 @@ private:
 
     QMap<GraphID, GraphProperties> m_properties;
     milliseconds m_currentMaxDuration {0};
+    bool m_logarithmicScale {false};
 };

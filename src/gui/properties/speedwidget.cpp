@@ -103,9 +103,15 @@ SpeedWidget::SpeedWidget(PropertiesWidget *parent)
     m_graphsButton = new ComboBoxMenuButton(this, m_graphsMenu);
     m_graphsButton->addItem(tr("Select Graphs"));
 
+    m_scaleToggleButton = new QPushButton(tr("Linear"), this);
+    m_scaleToggleButton->setCheckable(true);
+    m_scaleToggleButton->setToolTip(tr("Toggle between linear and logarithmic scale"));
+    connect(m_scaleToggleButton, &QPushButton::clicked, this, &SpeedWidget::onScaleToggle);
+
     m_hlayout->addWidget(m_periodLabel);
     m_hlayout->addWidget(m_periodCombobox);
     m_hlayout->addStretch();
+    m_hlayout->addWidget(m_scaleToggleButton);
     m_hlayout->addWidget(m_graphsButton);
 
     m_plot = new SpeedPlotView(this);
@@ -156,6 +162,13 @@ void SpeedWidget::onGraphChange(int id)
     m_plot->setGraphEnable(static_cast<SpeedPlotView::GraphID>(id), action->isChecked());
 }
 
+void SpeedWidget::onScaleToggle()
+{
+    const bool isLogarithmic = m_scaleToggleButton->isChecked();
+    m_scaleToggleButton->setText(isLogarithmic ? tr("Log") : tr("Linear"));
+    m_plot->setLogarithmicScale(isLogarithmic);
+}
+
 void SpeedWidget::loadSettings()
 {
     Preferences *preferences = Preferences::instance();
@@ -172,6 +185,11 @@ void SpeedWidget::loadSettings()
         action->setChecked(enable);
         m_plot->setGraphEnable(static_cast<SpeedPlotView::GraphID>(id), enable);
     }
+
+    const bool logarithmicScale = preferences->getSpeedWidgetLogarithmicScale();
+    m_scaleToggleButton->setChecked(logarithmicScale);
+    m_scaleToggleButton->setText(logarithmicScale ? tr("Log") : tr("Linear"));
+    m_plot->setLogarithmicScale(logarithmicScale);
 }
 
 void SpeedWidget::saveSettings() const
@@ -185,4 +203,6 @@ void SpeedWidget::saveSettings() const
         QAction *action = m_graphsMenuActions.at(id);
         preferences->setSpeedWidgetGraphEnable(id, action->isChecked());
     }
+
+    preferences->setSpeedWidgetLogarithmicScale(m_scaleToggleButton->isChecked());
 }
