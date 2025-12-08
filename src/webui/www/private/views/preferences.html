@@ -707,7 +707,7 @@
             </select>
         </div>
         <div class="formRow">
-            <input type="checkbox" id="anonymous_mode_checkbox">
+            <input type="checkbox" id="anonymous_mode_checkbox" onclick="qBittorrent.Preferences.updateAnonymousModeSettings();">
             <label for="anonymous_mode_checkbox">QBT_TR(Enable anonymous mode)QBT_TR[CONTEXT=OptionsDialog] (<a target="_blank" href="https://github.com/qbittorrent/qBittorrent/wiki/Anonymous-Mode">QBT_TR(More information)QBT_TR[CONTEXT=HttpServer]</a>)</label>
         </div>
     </fieldset>
@@ -1775,6 +1775,7 @@ Use ';' to split multiple entries. Can use wildcard '*'.)QBT_TR[CONTEXT=OptionsD
                 updateMaxUploadsEnabled: updateMaxUploadsEnabled,
                 updateMaxUploadsPerTorrentEnabled: updateMaxUploadsPerTorrentEnabled,
                 updateI2PSettingsEnabled: updateI2PSettingsEnabled,
+                updateAnonymousModeSettings: updateAnonymousModeSettings,
                 updatePeerProxySettings: updatePeerProxySettings,
                 updatePeerProxyAuthSettings: updatePeerProxyAuthSettings,
                 updateFilterSettings: updateFilterSettings,
@@ -1996,6 +1997,30 @@ Use ';' to split multiple entries. Can use wildcard '*'.)QBT_TR[CONTEXT=OptionsD
             document.getElementById("i2pAddress").disabled = !isI2PEnabled;
             document.getElementById("i2pPort").disabled = !isI2PEnabled;
             document.getElementById("i2pMixedMode").disabled = !isI2PEnabled;
+        };
+
+        const updateAnonymousModeSettings = () => {
+            const anonymousModeEnabled = document.getElementById("anonymous_mode_checkbox").checked;
+            const dhtCheckbox = document.getElementById("dht_checkbox");
+            const pexCheckbox = document.getElementById("pex_checkbox");
+            const lsdCheckbox = document.getElementById("lsd_checkbox");
+
+            if (anonymousModeEnabled) {
+                // When anonymous mode is enabled, disable and uncheck DHT, PEX, and LSD
+                // since anonymous mode overrides these settings
+                dhtCheckbox.disabled = true;
+                dhtCheckbox.checked = false;
+                pexCheckbox.disabled = true;
+                pexCheckbox.checked = false;
+                lsdCheckbox.disabled = true;
+                lsdCheckbox.checked = false;
+            } else {
+                // When anonymous mode is disabled, re-enable the checkboxes
+                // Values will be restored from server preferences when loading
+                dhtCheckbox.disabled = false;
+                pexCheckbox.disabled = false;
+                lsdCheckbox.disabled = false;
+            }
         };
 
         const updatePeerProxySettings = () => {
@@ -2462,12 +2487,29 @@ Use ';' to split multiple entries. Can use wildcard '*'.)QBT_TR[CONTEXT=OptionsD
 
                     // Bittorrent tab
                     // Privacy
-                    document.getElementById("dht_checkbox").checked = pref.dht;
-                    document.getElementById("pex_checkbox").checked = pref.pex;
-                    document.getElementById("lsd_checkbox").checked = pref.lsd;
                     const encryption = Number(pref.encryption);
                     document.getElementById("encryption_select").getChildren("option")[encryption].selected = true;
                     document.getElementById("anonymous_mode_checkbox").checked = pref.anonymous_mode;
+
+                    // Update DHT, PEX, and LSD based on anonymous mode state
+                    // Call the update function to sync the UI
+                    qBittorrent.Preferences.updateAnonymousModeSettings();
+                    // If anonymous mode is enabled, these will be disabled and unchecked
+                    if (pref.anonymous_mode) {
+                        document.getElementById("dht_checkbox").checked = false;
+                        document.getElementById("dht_checkbox").disabled = true;
+                        document.getElementById("pex_checkbox").checked = false;
+                        document.getElementById("pex_checkbox").disabled = true;
+                        document.getElementById("lsd_checkbox").checked = false;
+                        document.getElementById("lsd_checkbox").disabled = true;
+                    } else {
+                        document.getElementById("dht_checkbox").checked = pref.dht;
+                        document.getElementById("dht_checkbox").disabled = false;
+                        document.getElementById("pex_checkbox").checked = pref.pex;
+                        document.getElementById("pex_checkbox").disabled = false;
+                        document.getElementById("lsd_checkbox").checked = pref.lsd;
+                        document.getElementById("lsd_checkbox").disabled = false;
+                    }
 
                     document.getElementById("maxActiveCheckingTorrents").value = pref.max_active_checking_torrents;
 
@@ -2867,11 +2909,34 @@ Use ';' to split multiple entries. Can use wildcard '*'.)QBT_TR[CONTEXT=OptionsD
 
             // Bittorrent tab
             // Privacy
-            settings["dht"] = document.getElementById("dht_checkbox").checked;
-            settings["pex"] = document.getElementById("pex_checkbox").checked;
-            settings["lsd"] = document.getElementById("lsd_checkbox").checked;
             settings["encryption"] = Number(document.getElementById("encryption_select").getSelected()[0].value);
-            settings["anonymous_mode"] = document.getElementById("anonymous_mode_checkbox").checked;
+
+            // Warn about anonymous mode if enabling without proxy
+            const anonymousModeEnabled = document.getElementById("anonymous_mode_checkbox").checked;
+            if (anonymousModeEnabled) {
+                const proxyType = document.getElementById("peer_proxy_type_select").value;
+                if (proxyType === "0" || proxyType === "None") {
+                    const confirmed = confirm("QBT_TR(Warning: Anonymous mode disables DHT, Peer Exchange (PeX), and Local Peer Discovery (LSD), which are essential for finding peers and downloading torrents.\n\nThis mode should ONLY be enabled when using a proxy or VPN connection. No proxy is currently configured.\n\nWithout a proxy/VPN, downloads may fail or be extremely slow.\n\nDo you want to enable anonymous mode anyway?)QBT_TR[CONTEXT=HttpServer]");
+                    if (!confirmed) {
+                        document.getElementById("anonymous_mode_checkbox").checked = false;
+                        qBittorrent.Preferences.updateAnonymousModeSettings(); // Update UI state
+                        return;
+                    }
+                    // Update UI to reflect that DHT, PEX, and LSD are now disabled
+                    qBittorrent.Preferences.updateAnonymousModeSettings();
+                }
+                // When anonymous mode is enabled, force DHT, PEX, and LSD to false
+                // since anonymous mode overrides these settings
+                settings["dht"] = false;
+                settings["pex"] = false;
+                settings["lsd"] = false;
+            } else {
+                // When anonymous mode is disabled, use the checkbox values
+                settings["dht"] = document.getElementById("dht_checkbox").checked;
+                settings["pex"] = document.getElementById("pex_checkbox").checked;
+                settings["lsd"] = document.getElementById("lsd_checkbox").checked;
+            }
+            settings["anonymous_mode"] = anonymousModeEnabled;
 
             settings["max_active_checking_torrents"] = Number(document.getElementById("maxActiveCheckingTorrents").value);
 

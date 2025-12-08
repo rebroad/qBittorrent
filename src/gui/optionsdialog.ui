@@ -2781,7 +2781,7 @@ Disable encryption: Only connect to peers without protocol encryption</string>
                  <item>
                   <widget class="QCheckBox" name="checkAnonymousMode">
                    <property name="toolTip">
-                    <string>Enable when using a proxy or a VPN connection</string>
+                    <string>Enable only when using a proxy or a VPN connection</string>
                    </property>
                    <property name="text">
                     <string>Enable anonymous mode</string>

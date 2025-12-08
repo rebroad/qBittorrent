@@ -1089,7 +1089,20 @@ void OptionsDialog::loadBittorrentTabOptions()
     m_ui->checkPeX->setChecked(session->isPeXEnabled());
     m_ui->checkLSD->setChecked(session->isLSDEnabled());
     m_ui->comboEncryption->setCurrentIndex(session->encryption());
-    m_ui->checkAnonymousMode->setChecked(session->isAnonymousModeEnabled());
+    const bool anonymousModeEnabled = session->isAnonymousModeEnabled();
+    m_ui->checkAnonymousMode->setChecked(anonymousModeEnabled);
+
+    // If anonymous mode is enabled, disable and uncheck DHT, PEX, and LSD
+    // since anonymous mode overrides these settings
+    if (anonymousModeEnabled)
+    {
+        m_ui->checkDHT->setEnabled(false);
+        m_ui->checkDHT->setChecked(false);
+        m_ui->checkPeX->setEnabled(false);
+        m_ui->checkPeX->setChecked(false);
+        m_ui->checkLSD->setEnabled(false);
+        m_ui->checkLSD->setChecked(false);
+    }
 
     m_ui->spinBoxMaxActiveCheckingTorrents->setValue(session->maxActiveCheckingTorrents());
 
@@ -1171,7 +1184,60 @@ void OptionsDialog::loadBittorrentTabOptions()
     connect(m_ui->checkPeX, &QAbstractButton::toggled, this, &ThisType::enableApplyButton);
     connect(m_ui->checkLSD, &QAbstractButton::toggled, this, &ThisType::enableApplyButton);
     connect(m_ui->comboEncryption, qComboBoxCurrentIndexChanged, this, &ThisType::enableApplyButton);
-    connect(m_ui->checkAnonymousMode, &QAbstractButton::toggled, this, &ThisType::enableApplyButton);
+    connect(m_ui->checkAnonymousMode, &QAbstractButton::toggled, this, [this](bool checked)
+    {
+        if (checked)
+        {
+            const auto *proxyConfigManager = Net::ProxyConfigurationManager::instance();
+            const Net::ProxyConfiguration proxyConf = proxyConfigManager->proxyConfiguration();
+
+            if (proxyConf.type == Net::ProxyType::None)
+            {
+                const QMessageBox::StandardButton reply = QMessageBox::warning(
+                    this,
+                    tr("Anonymous Mode Warning"),
+                    tr("Anonymous mode disables DHT, Peer Exchange (PeX), and Local Peer Discovery (LSD), "
+                       "which are essential for finding peers and downloading torrents.\n\n"
+                       "This mode should ONLY be enabled when using a proxy or VPN connection. "
+                       "No proxy is currently configured.\n\n"
+                       "Without a proxy/VPN, downloads may fail or be extremely slow due to limited peer discovery.\n\n"
+                       "Do you want to enable anonymous mode anyway?"),
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::No
+                );
+
+                if (reply == QMessageBox::No)
+                {
+                    m_ui->checkAnonymousMode->blockSignals(true);
+                    m_ui->checkAnonymousMode->setChecked(false);
+                    m_ui->checkAnonymousMode->blockSignals(false);
+                    return;
+                }
+            }
+
+            // When anonymous mode is enabled, disable and uncheck DHT, PEX, and LSD
+            // since anonymous mode overrides these settings
+            m_ui->checkDHT->setEnabled(false);
+            m_ui->checkDHT->setChecked(false);
+            m_ui->checkPeX->setEnabled(false);
+            m_ui->checkPeX->setChecked(false);
+            m_ui->checkLSD->setEnabled(false);
+            m_ui->checkLSD->setChecked(false);
+        }
+        else
+        {
+            // When anonymous mode is disabled, re-enable DHT, PEX, and LSD checkboxes
+            // and restore their previous values from the session
+            const auto *session = BitTorrent::Session::instance();
+            m_ui->checkDHT->setEnabled(true);
+            m_ui->checkDHT->setChecked(session->isDHTEnabled());
+            m_ui->checkPeX->setEnabled(true);
+            m_ui->checkPeX->setChecked(session->isPeXEnabled());
+            m_ui->checkLSD->setEnabled(true);
+            m_ui->checkLSD->setChecked(session->isLSDEnabled());
+        }
+        enableApplyButton();
+    });
 
     connect(m_ui->spinBoxMaxActiveCheckingTorrents, qSpinBoxValueChanged, this, &ThisType::enableApplyButton);
 
