@@ -1645,6 +1645,14 @@ Use ';' to split multiple entries. Can use wildcard '*'.)QBT_TR[CONTEXT=OptionsD
                 </tr>
                 <tr>
                     <td>
+                        <label for="additionalAnnounceIP">QBT_TR(Additional IP to report to trackers (BEP-7 style; e.g. relay + your public):)QBT_TR[CONTEXT=OptionsDialog]</label>
+                    </td>
+                    <td>
+                        <input type="text" id="additionalAnnounceIP" style="width: 15em;">
+                    </td>
+                </tr>
+                <tr>
+                    <td>
                         <label for="announcePort">QBT_TR(Port reported to trackers (requires restart) [0: listening port]:)QBT_TR[CONTEXT=OptionsDialog]&nbsp;<a href="https://www.libtorrent.org/reference-Settings.html#announce_port" target="_blank">(?)</a></label>
                     </td>
                     <td>
@@ -2680,6 +2688,7 @@ Use ';' to split multiple entries. Can use wildcard '*'.)QBT_TR[CONTEXT=OptionsD
                     document.getElementById("announceAllTrackers").checked = pref.announce_to_all_trackers;
                     document.getElementById("announceAllTiers").checked = pref.announce_to_all_tiers;
                     document.getElementById("announceIP").value = pref.announce_ip;
+                    document.getElementById("additionalAnnounceIP").value = pref.additional_announce_ip || "";
                     document.getElementById("announcePort").value = pref.announce_port;
                     document.getElementById("maxConcurrentHTTPAnnounces").value = pref.max_concurrent_http_announces;
                     document.getElementById("stopTrackerTimeout").value = pref.stop_tracker_timeout;
@@ -3196,6 +3205,7 @@ Use ';' to split multiple entries. Can use wildcard '*'.)QBT_TR[CONTEXT=OptionsD
             settings["announce_to_all_trackers"] = document.getElementById("announceAllTrackers").checked;
             settings["announce_to_all_tiers"] = document.getElementById("announceAllTiers").checked;
             settings["announce_ip"] = document.getElementById("announceIP").value;
+            settings["additional_announce_ip"] = document.getElementById("additionalAnnounceIP").value;
             const announcePort = Number(document.getElementById("announcePort").value);
             if (Number.isNaN(announcePort) || (announcePort < 0) || (announcePort > 65535)) {
                 alert("QBT_TR(The announce port must be between 0 and 65535.)QBT_TR[CONTEXT=OptionsDialog]");

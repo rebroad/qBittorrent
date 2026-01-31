@@ -76,7 +76,10 @@
 #include <QString>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <QUuid>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
 
 #include "base/algorithm.h"
 #include "base/freediskspacechecker.h"
@@ -488,6 +491,7 @@ SessionImpl::SessionImpl(QObject *parent)
     , m_ignoreLimitsOnLAN(BITTORRENT_SESSION_KEY(u"IgnoreLimitsOnLAN"_s), false)
     , m_includeOverheadInLimits(BITTORRENT_SESSION_KEY(u"IncludeOverheadInLimits"_s), false)
     , m_announceIP(BITTORRENT_SESSION_KEY(u"AnnounceIP"_s))
+    , m_additionalAnnounceIP(BITTORRENT_SESSION_KEY(u"AdditionalAnnounceIP"_s))
     , m_announcePort(BITTORRENT_SESSION_KEY(u"AnnouncePort"_s), 0)
     , m_maxConcurrentHTTPAnnounces(BITTORRENT_SESSION_KEY(u"MaxConcurrentHTTPAnnounces"_s), 50)
     , m_isReannounceWhenAddressChangedEnabled(BITTORRENT_SESSION_KEY(u"ReannounceWhenAddressChanged"_s), false)
@@ -1668,6 +1672,9 @@ void SessionImpl::endStartup(ResumeSessionContext *context)
             enqueueRefresh();
 
         m_statisticsLastUpdateTimer.start();
+
+        if (!m_additionalAnnounceIP.get().isEmpty())
+            startAdditionalAnnounceTimer();
 
         // Regular saving of fastresume data
         connect(m_resumeDataTimer, &QTimer::timeout, this, &SessionImpl::generateResumeData);
@@ -4938,6 +4945,23 @@ void SessionImpl::setAnnounceIP(const QString &ip)
     }
 }
 
+QString SessionImpl::additionalAnnounceIP() const
+{
+    return m_additionalAnnounceIP;
+}
+
+void SessionImpl::setAdditionalAnnounceIP(const QString &ip)
+{
+    if (ip != m_additionalAnnounceIP)
+    {
+        m_additionalAnnounceIP = ip;
+        if (ip.isEmpty())
+            stopAdditionalAnnounceTimer();
+        else
+            startAdditionalAnnounceTimer();
+    }
+}
+
 int SessionImpl::announcePort() const
 {
     return m_announcePort;
@@ -4988,6 +5012,79 @@ void SessionImpl::reannounceToAllTrackers() const
             torrent->nativeHandle().force_reannounce(0, -1, lt::torrent_handle::ignore_min_interval);
         }
         catch (const std::exception &) {}
+    }
+}
+
+void SessionImpl::startAdditionalAnnounceTimer()
+{
+    if (!m_additionalAnnounceTimer)
+    {
+        m_additionalAnnounceTimer = new QTimer(this);
+        connect(m_additionalAnnounceTimer, &QTimer::timeout, this, &SessionImpl::sendAdditionalAnnounceToTrackers);
+        m_additionalAnnounceTimer->setInterval(30 * 60 * 1000);  // 30 minutes
+    }
+    QTimer::singleShot(60 * 1000, this, &SessionImpl::sendAdditionalAnnounceToTrackers);  // first run after 60s
+    m_additionalAnnounceTimer->start();
+}
+
+void SessionImpl::stopAdditionalAnnounceTimer()
+{
+    if (m_additionalAnnounceTimer)
+        m_additionalAnnounceTimer->stop();
+}
+
+void SessionImpl::sendAdditionalAnnounceToTrackers()
+{
+    const QString additionalIP = m_additionalAnnounceIP.get();
+    if (additionalIP.isEmpty())
+        return;
+
+    const std::string peerIdStr = lt::generate_fingerprint(PEER_ID, QBT_VERSION_MAJOR, QBT_VERSION_MINOR, QBT_VERSION_BUGFIX, QBT_VERSION_BUILD);
+    const QByteArray peerIdBytes(peerIdStr.data(), 20);
+    const QByteArray peerIdEnc = peerIdBytes.toPercentEncoding(QByteArray(), QByteArray());
+    const int listenPort = (m_announcePort > 0) ? m_announcePort : m_port;
+    if (listenPort <= 0)
+        return;
+
+    if (!m_additionalAnnounceNetworkManager)
+        m_additionalAnnounceNetworkManager = new QNetworkAccessManager(this);
+
+    for (TorrentImpl *torrent : asConst(m_torrents))
+    {
+        if (torrent->isStopped())
+            continue;
+        const InfoHash infoHash = torrent->infoHash();
+        if (!infoHash.isValid() || !infoHash.v1().isValid())
+            continue;
+        const QByteArray infoHashBytes = QByteArray::fromHex(torrent->infoHash().v1().toString().toLatin1());
+        if (infoHashBytes.size() != 20)
+            continue;
+        const QByteArray infoHashEnc = infoHashBytes.toPercentEncoding(QByteArray(), QByteArray());
+        const qlonglong uploaded = torrent->totalUpload();
+        const qlonglong downloaded = torrent->totalDownload();
+        const qlonglong left = std::max(qlonglong(0), torrent->wantedSize() - torrent->completedSize());
+
+        for (const TrackerEntryStatus &trackerStatus : torrent->trackers())
+        {
+            const QString urlStr = trackerStatus.url;
+            if (!urlStr.startsWith(u"http://"_s) && !urlStr.startsWith(u"https://"_s))
+                continue;
+            const QUrl url(urlStr);
+            const QString ourParams = u"info_hash="_s + QString::fromLatin1(infoHashEnc)
+                + u"&peer_id="_s + QString::fromLatin1(peerIdEnc)
+                + u"&port="_s + QString::number(listenPort)
+                + u"&uploaded="_s + QString::number(uploaded)
+                + u"&downloaded="_s + QString::number(downloaded)
+                + u"&left="_s + QString::number(left)
+                + u"&compact=1&no_peer_id=1&ip="_s + QString::fromLatin1(QUrl::toPercentEncoding(additionalIP));
+            const QString fullUrlStr = urlStr + (url.hasQuery() ? QStringLiteral("&") : QStringLiteral("?")) + ourParams;
+            const QUrl finalUrl(fullUrlStr);
+            if (!finalUrl.isValid())
+                continue;
+            QNetworkRequest req(finalUrl);
+            req.setHeader(QNetworkRequest::UserAgentHeader, USER_AGENT);
+            m_additionalAnnounceNetworkManager->get(req);
+        }
     }
 }
 
