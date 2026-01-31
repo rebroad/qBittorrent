@@ -58,6 +58,7 @@
 #include "sessionstatus.h"
 #include "torrentinfo.h"
 
+class QNetworkAccessManager;
 class QString;
 class QTimer;
 class QUrl;
@@ -369,6 +370,8 @@ namespace BitTorrent
         void setIncludeOverheadInLimits(bool include) override;
         QString announceIP() const override;
         void setAnnounceIP(const QString &ip) override;
+        QString additionalAnnounceIP() const override;
+        void setAdditionalAnnounceIP(const QString &ip) override;
         int announcePort() const override;
         void setAnnouncePort(int port) override;
         int maxConcurrentHTTPAnnounces() const override;
@@ -646,6 +649,10 @@ namespace BitTorrent
 
         void updateTrackerEntryStatuses(lt::torrent_handle torrentHandle);
 
+        void sendAdditionalAnnounceToTrackers();
+        void startAdditionalAnnounceTimer();
+        void stopAdditionalAnnounceTimer();
+
         void handleRemovedTorrent(const TorrentID &torrentID, const QString &partfileRemoveError = {});
 
         void setAdditionalTrackersFromURL(const QString &trackers);
@@ -697,6 +704,7 @@ namespace BitTorrent
         CachedSettingValue<bool> m_ignoreLimitsOnLAN;
         CachedSettingValue<bool> m_includeOverheadInLimits;
         CachedSettingValue<QString> m_announceIP;
+        CachedSettingValue<QString> m_additionalAnnounceIP;
         CachedSettingValue<int> m_announcePort;
         CachedSettingValue<int> m_maxConcurrentHTTPAnnounces;
         CachedSettingValue<bool> m_isReannounceWhenAddressChangedEnabled;
@@ -879,6 +887,8 @@ namespace BitTorrent
 
         FreeDiskSpaceChecker *m_freeDiskSpaceChecker = nullptr;
         QTimer *m_freeDiskSpaceCheckingTimer = nullptr;
+        QTimer *m_additionalAnnounceTimer = nullptr;
+        class QNetworkAccessManager *m_additionalAnnounceNetworkManager = nullptr;
         qint64 m_freeDiskSpace = -1;
 
         friend void Session::initInstance();
