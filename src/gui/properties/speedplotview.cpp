@@ -44,6 +44,7 @@ namespace
 {
     // table of supposed nice steps for grid marks to get nice looking quarters of scale
     const qreal roundingTable[] = {1.2, 1.6, 2, 2.4, 2.8, 3.2, 4, 6, 8};
+    constexpr qreal logarithmicScaleExponent = std::log10(2.0);
 
     struct SplitValue
     {
@@ -271,7 +272,7 @@ qreal SpeedPlotView::calculateYValue(const qreal value, const qreal maxValue, co
 
     qreal result;
     if (m_logarithmicScale)
-        result = std::log1p(value) / std::log1p(maxValue);
+        result = std::pow(value / maxValue, logarithmicScaleExponent);
     else
         result = value / maxValue;
 
@@ -351,6 +352,23 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
     gridPen.setStyle(Qt::DashLine);
     gridPen.setWidthF(1);
     gridPen.setColor(QColor(128, 128, 128, 128));
+
+    if (m_logarithmicScale)
+    {
+        QPen minorGridPen = gridPen;
+        minorGridPen.setColor(QColor(128, 128, 128, 64));
+        painter.setPen(minorGridPen);
+        for (int i = 0; i < speedLabelValues.size() - 2; ++i)
+        {
+            const qreal upperLabelBytes = Utils::Misc::sizeInBytes(speedLabelValues.at(i), niceScale.unit);
+            const qreal lowerLabelBytes = Utils::Misc::sizeInBytes(speedLabelValues.at(i + 1), niceScale.unit);
+            const qreal upperOffset = calculateYValue(upperLabelBytes, scaleMaxValue, rect.height());
+            const qreal lowerOffset = calculateYValue(lowerLabelBytes, scaleMaxValue, rect.height());
+            const qreal labelY = rect.bottom() - 0.5 * (upperOffset + lowerOffset);
+            painter.drawLine(fullRect.left(), labelY, rect.right(), labelY);
+        }
+    }
+
     painter.setPen(gridPen);
 
     for (const qreal labelValue : speedLabelValues)
