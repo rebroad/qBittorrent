@@ -29,6 +29,7 @@
 
 #include "speedplotview.h"
 
+#include <array>
 #include <cmath>
 
 #include <QLocale>
@@ -96,6 +97,23 @@ namespace
         const int precision = (argValue < 10) ? friendlyUnitPrecision(unit) : 0;
         return QLocale::system().toString(argValue, 'f', precision)
                + QChar::Nbsp + unitString(unit, true);
+    }
+
+    QString formatSpeedLabel(const qreal bytes)
+    {
+        static constexpr std::array<const char *, 7> decimalUnits { "B", "KB", "MB", "GB", "TB", "PB", "EB" };
+
+        qreal value = std::max(0.0, bytes);
+        int unitIndex = 0;
+        while ((value >= 1000.0) && (unitIndex < static_cast<int>(decimalUnits.size()) - 1))
+        {
+            value /= 1000.0;
+            ++unitIndex;
+        }
+
+        const int precision = (value < 10.0) ? 1 : 0;
+        return QLocale::system().toString(value, 'f', precision)
+               + QChar::Nbsp + QString::fromLatin1(decimalUnits[unitIndex]) + QStringLiteral("/s");
     }
 }
 
@@ -324,25 +342,27 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
     rect.adjust(0, fontMetrics.height(), 0, 0); // Add top padding for top speed text
 
     // draw Y axis speed labels
-    const qreal scaleMaxValue = niceScale.sizeInBytes();
+    const qreal scaleMaxValue = m_logarithmicScale
+        ? std::pow(10.0, std::ceil(std::log10(niceScale.sizeInBytes())))
+        : niceScale.sizeInBytes();
     const QList<qreal> speedLabelValues = m_logarithmicScale
-        ? QList<qreal> {niceScale.arg, niceScale.arg * 0.1, niceScale.arg * 0.01, niceScale.arg * 0.001, 0.0}
+        ? QList<qreal> {scaleMaxValue, scaleMaxValue * 0.1, scaleMaxValue * 0.01, scaleMaxValue * 0.001, 0.0}
         : QList<qreal> {niceScale.arg, niceScale.arg * 0.75, niceScale.arg * 0.50, niceScale.arg * 0.25, 0.0};
 
     int yAxisWidth = 0;
     for (const qreal labelValue : speedLabelValues)
     {
-        const QString label = formatLabel(labelValue, niceScale.unit);
+        const QString label = m_logarithmicScale ? formatSpeedLabel(labelValue) : formatLabel(labelValue, niceScale.unit);
         yAxisWidth = std::max(yAxisWidth, fontMetrics.horizontalAdvance(label));
     }
 
     for (const qreal labelValue : speedLabelValues)
     {
-        const qreal labelBytes = Utils::Misc::sizeInBytes(labelValue, niceScale.unit);
+        const qreal labelBytes = m_logarithmicScale ? labelValue : Utils::Misc::sizeInBytes(labelValue, niceScale.unit);
         const qreal labelOffset = calculateYValue(labelBytes, scaleMaxValue, rect.height());
         const qreal labelY = rect.bottom() - labelOffset - 0.5 * fontMetrics.height();
         QRectF labelRect(rect.left() - yAxisWidth, labelY, 2 * yAxisWidth, fontMetrics.height());
-        painter.drawText(labelRect, formatLabel(labelValue, niceScale.unit), Qt::AlignRight | Qt::AlignVCenter);
+        painter.drawText(labelRect, m_logarithmicScale ? formatSpeedLabel(labelValue) : formatLabel(labelValue, niceScale.unit), Qt::AlignRight | Qt::AlignVCenter);
     }
 
     // draw grid lines
@@ -360,12 +380,19 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
         painter.setPen(minorGridPen);
         for (int i = 0; i < speedLabelValues.size() - 2; ++i)
         {
-            const qreal upperLabelBytes = Utils::Misc::sizeInBytes(speedLabelValues.at(i), niceScale.unit);
-            const qreal lowerLabelBytes = Utils::Misc::sizeInBytes(speedLabelValues.at(i + 1), niceScale.unit);
-            const qreal upperOffset = calculateYValue(upperLabelBytes, scaleMaxValue, rect.height());
-            const qreal lowerOffset = calculateYValue(lowerLabelBytes, scaleMaxValue, rect.height());
-            const qreal labelY = rect.bottom() - 0.5 * (upperOffset + lowerOffset);
-            painter.drawLine(fullRect.left(), labelY, rect.right(), labelY);
+            const qreal upperLabelBytes = speedLabelValues.at(i);
+            const qreal lowerLabelBytes = speedLabelValues.at(i + 1);
+            if (lowerLabelBytes <= 0.0)
+                continue;
+
+            for (int stepIndex = 2; stepIndex < 10; ++stepIndex)
+            {
+                const qreal tickBytes = lowerLabelBytes * stepIndex;
+                if (tickBytes >= upperLabelBytes)
+                    break;
+                const qreal labelY = rect.bottom() - calculateYValue(tickBytes, scaleMaxValue, rect.height());
+                painter.drawLine(fullRect.left(), labelY, rect.right(), labelY);
+            }
         }
     }
 
@@ -373,7 +400,7 @@ void SpeedPlotView::paintEvent(QPaintEvent *)
 
     for (const qreal labelValue : speedLabelValues)
     {
-        const qreal labelBytes = Utils::Misc::sizeInBytes(labelValue, niceScale.unit);
+        const qreal labelBytes = m_logarithmicScale ? labelValue : Utils::Misc::sizeInBytes(labelValue, niceScale.unit);
         const qreal labelOffset = calculateYValue(labelBytes, scaleMaxValue, rect.height());
         const qreal labelY = rect.bottom() - labelOffset;
         painter.drawLine(fullRect.left(), labelY, rect.right(), labelY);
