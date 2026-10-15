@@ -10,7 +10,8 @@ Make qBittorrent automatically keep downloading on this computer when direct Bit
 - Select either pi3 or bigquiet, never route through both. On relay change, move the router's UPnP port mapping to the selected relay and update qBittorrent's advertised address.
 - Provide the network path qBittorrent needs when direct connectivity fails, including TCP and UDP tracker, DHT, uTP, and peer traffic. On pi3, route UDP through the VPN when qBittorrent is bound to `tun-qbt`; do not advertise a UDP mapping for a relay mode that cannot forward it.
 - Keep the existing TCP incoming-peer reverse tunnel where useful, and use outbound peer proxying when it improves reachability.
+- When outbound peer traffic is actively and successfully routed through the selected relay, have qBittorrent report `Proxied` with a clear proxy icon instead of reporting only `Firewalled`. Show that state only while real peer proxying is verified healthy; clear it when the path fails or only tracker proxying is active. If qBittorrent has no suitable native indicator, add one to its UI.
 - Automatically handle UDP-only magnets and stalled existing torrents, including adding/reannouncing TCP trackers when those are the available fallback.
-- Verify the selected relay, router mapping, local qBittorrent listener, outbound tracker/peer route, relay failover, and local download behavior without running a second torrent client.
+- Verify the selected relay, router mapping, local qBittorrent listener, outbound tracker/peer route, relay failover, local download behavior, and the `Proxied` text/icon during successful peer proxying (including that it clears on proxy failure), without running a second torrent client.
 
 See [GOAL_PROGRESS.md](GOAL_PROGRESS.md) for current implementation status, verification evidence, and remaining work.

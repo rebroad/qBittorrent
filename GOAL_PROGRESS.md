@@ -28,8 +28,8 @@ This file records implementation state and verification evidence for [GOAL.md](G
 - The live read-only verifier passed: router TCP 54716 maps to pi3 (`192.168.0.11`), the local API reports listen port 54716 and advertised public IP `82.1.79.142`, TCP reaches qBittorrent through the reverse tunnel, router hairpin works, and the relay lifecycle service is active.
 - Both lifecycle services are active with no temporary environment overrides. The active relay state is pi3. qBittorrent is in normal `wlo1` mode; its local TCP and UDP listeners are present. The fallback monitor was restarted after the final script edit and is running the current source.
 - qBittorrent has 13 torrents and none are incomplete. No qBittorrent or Transmission client is running on pi3 or bigquiet. With no incomplete download to recover, the monitor has no active fallback state; the previously recorded controlled pi3 outage and Bigquiet local-download test verify automatic failover behavior.
-- The implementation changes are pushed. This progress record is the only remaining documentation change to publish.
+- The previous implementation changes are pushed. The live audit above predates the newly added `Proxied` status/icon requirement.
 
 ## Remaining work
 
-- No further work remains after this audit record is committed and pushed.
+- Add a qBittorrent `Proxied` status and clear proxy icon that reflect successfully working outbound peer proxying through the selected relay. Do not show it merely because tracker proxying or a proxy setting is enabled, and clear it when peer proxying fails. Verify the UI state and icon against real peer traffic and a proxy-path failure. The latest live API check showed `proxy_peer_connections=false`, `connection_status=firewalled`, and zero DHT nodes, so this requirement is not yet met.
