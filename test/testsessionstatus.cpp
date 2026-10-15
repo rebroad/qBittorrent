@@ -30,6 +30,9 @@
 #include <QTest>
 
 #include "base/bittorrent/sessionstatus.h"
+#include "base/bittorrent/proxiedpeerconnectiontracker.h"
+
+using namespace Qt::Literals::StringLiterals;
 
 class TestSessionStatus final : public QObject
 {
@@ -52,6 +55,36 @@ private slots:
         status.hasProxiedPeerConnections = true;
         QCOMPARE(status.connectionStatus(true), BitTorrent::ConnectionStatus::Proxied);
         QCOMPARE(status.connectionStatus(false), BitTorrent::ConnectionStatus::Disconnected);
+    }
+
+    void proxiedPeerDisconnectClearsStatus() const
+    {
+        BitTorrent::ProxiedPeerConnectionTracker<QString> connections;
+        BitTorrent::SessionStatus status;
+
+        connections.add(u"torrent-1"_s, u"peer-1"_s);
+        status.hasProxiedPeerConnections = !connections.isEmpty();
+        QCOMPARE(status.connectionStatus(true), BitTorrent::ConnectionStatus::Proxied);
+
+        connections.remove(u"torrent-1"_s, u"peer-1"_s);
+        status.hasProxiedPeerConnections = !connections.isEmpty();
+        QCOMPARE(status.connectionStatus(true), BitTorrent::ConnectionStatus::Firewalled);
+    }
+
+    void remainingProxiedPeersKeepStatus() const
+    {
+        BitTorrent::ProxiedPeerConnectionTracker<QString> connections;
+        BitTorrent::SessionStatus status;
+
+        connections.add(u"torrent-1"_s, u"peer-1"_s);
+        connections.add(u"torrent-2"_s, u"peer-2"_s);
+        connections.remove(u"torrent-1"_s, u"peer-1"_s);
+        status.hasProxiedPeerConnections = !connections.isEmpty();
+        QCOMPARE(status.connectionStatus(true), BitTorrent::ConnectionStatus::Proxied);
+
+        connections.removeTorrent(u"torrent-2"_s);
+        status.hasProxiedPeerConnections = !connections.isEmpty();
+        QCOMPARE(status.connectionStatus(true), BitTorrent::ConnectionStatus::Firewalled);
     }
 };
 

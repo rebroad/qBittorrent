@@ -54,6 +54,7 @@
 #include "addtorrentparams.h"
 #include "cachestatus.h"
 #include "categoryoptions.h"
+#include "proxiedpeerconnectiontracker.h"
 #include "session.h"
 #include "sessionstatus.h"
 #include "torrentinfo.h"
@@ -859,7 +860,7 @@ namespace BitTorrent
         QHash<lt::torrent_handle, QHash<std::string, QHash<lt::tcp::endpoint, QMap<int, int>>>> m_updatedTrackerStatuses;
         QMutex m_updatedTrackerStatusesMutex;
 
-        QHash<lt::torrent_handle, QSet<QString>> m_proxiedPeerConnections;
+        ProxiedPeerConnectionTracker<lt::torrent_handle> m_proxiedPeerConnections;
 
         // I/O errored torrents
         QSet<TorrentID> m_recentErroredTorrents;
