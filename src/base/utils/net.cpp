@@ -45,6 +45,14 @@ namespace Utils
             return !QHostAddress(ip).isNull();
         }
 
+        bool isLocalAddress(const QHostAddress &addr)
+        {
+            if (addr.isLoopback())
+                return true;
+
+            return QNetworkInterface::allAddresses().contains(addr);
+        }
+
         std::optional<Subnet> parseSubnet(const QString &subnetStr)
         {
             const Subnet subnet = QHostAddress::parseSubnet(subnetStr);

@@ -29,9 +29,12 @@
 #include "peerinfo.h"
 
 #include <QBitArray>
+#include <QFile>
+#include <QStandardPaths>
 
 #include "base/bittorrent/ltqbitarray.h"
 #include "base/net/geoipmanager.h"
+#include "base/utils/net.h"
 #include "base/unicodestrings.h"
 #include "base/utils/bytearray.h"
 #include "peeraddress.h"
@@ -62,6 +65,9 @@ bool PeerInfo::fromLSD() const
 
 QString PeerInfo::country() const
 {
+    if (isRelayed())
+        return {};
+
     if (m_country.isEmpty())
         m_country = Net::GeoIPManager::instance()->lookup(address().ip);
     return m_country;
@@ -95,6 +101,62 @@ bool PeerInfo::isSupportsExtensions() const
 bool PeerInfo::isLocalConnection() const
 {
     return static_cast<bool>(m_nativeInfo.flags & lt::peer_info::local_connection);
+}
+
+bool PeerInfo::isRelayed() const
+{
+    return (m_nativeInfo.source & lt::peer_info::incoming) && !relayName().isEmpty();
+}
+
+QString PeerInfo::relayName() const
+{
+    if (!(m_nativeInfo.source & lt::peer_info::incoming))
+        return {};
+
+    return relayNameForIncomingAddress(address().ip);
+}
+
+QString PeerInfo::relayNameForIncomingAddress([[maybe_unused]] const QHostAddress &address)
+{
+#ifdef Q_OS_LINUX
+    const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    if (runtimeDir.isEmpty())
+        return {};
+
+    QFile stateFile {runtimeDir + u"/qbittorrent-active-relay"_s};
+    if (!stateFile.open(QIODevice::ReadOnly))
+        return {};
+
+    const QList<QByteArray> fields = stateFile.readAll().simplified().split(' ');
+    if (fields.size() != 2)
+        return {};
+
+    const QString relay = QString::fromLatin1(fields[0]);
+    if ((relay != u"pi3"_s) && (relay != u"bigquiet"_s))
+        return {};
+
+    if (!isRelayedEndpoint(address, relay))
+        return {};
+
+    bool ok = false;
+    const qint64 pid = fields[1].toLongLong(&ok);
+    if (!ok || (pid <= 0))
+        return {};
+
+    QFile processCommandLine {u"/proc/%1/cmdline"_s.arg(pid)};
+    if (!processCommandLine.open(QIODevice::ReadOnly)
+        || !processCommandLine.readAll().contains("bittorrent-via-bigquiet.sh"))
+        return {};
+
+    return relay;
+#else
+    return {};
+#endif
+}
+
+bool PeerInfo::isRelayedEndpoint(const QHostAddress &address, const QString &relayName)
+{
+    return !relayName.isEmpty() && Utils::Net::isLocalAddress(address);
 }
 
 bool PeerInfo::isHandshake() const

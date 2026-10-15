@@ -8,12 +8,14 @@ include_directories("../src")
 set(testFiles
     testalgorithm.cpp
     testbittorrentpeeraddress.cpp
+    testbittorrentpeerinfo.cpp
     testbittorrenttrackerentry.cpp
     testconceptsexplicitlyconvertibleto.cpp
     testconceptsstringable.cpp
     testglobal.cpp
     testorderedset.cpp
     testsessionstatus.cpp
+    testgeoipdatabase.cpp
     testpath.cpp
     testutilsbytearray.cpp
     testutilscompare.cpp

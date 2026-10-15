@@ -44,6 +44,7 @@ namespace Utils::Net
     using Subnet = std::pair<QHostAddress, int>;
 
     bool isValidIP(const QString &ip);
+    bool isLocalAddress(const QHostAddress &addr);
     std::optional<Subnet> parseSubnet(const QString &subnetStr);
     bool isIPInSubnets(const QHostAddress &addr, const QList<Subnet> &subnets);
     QString subnetToString(const Subnet &subnet);

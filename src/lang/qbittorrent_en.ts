@@ -8011,6 +8011,21 @@ readme[0-9].txt: filter &apos;readme1.txt&apos;, &apos;readme2.txt&apos; but not
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../gui/properties/peerlistwidget.cpp" line="452"/>
+        <source>Relayed via %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../gui/properties/peerlistwidget.cpp" line="454"/>
+        <source>The original peer address is unavailable because SSH forwarding through %1 hides it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../gui/properties/peerlistwidget.cpp" line="458"/>
+        <source>SSH forwarding through %1 hides the original peer port.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../gui/properties/peerlistwidget.cpp" line="116"/>
         <source>Port</source>
         <translation type="unfinished"></translation>

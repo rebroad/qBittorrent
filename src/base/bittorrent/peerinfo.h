@@ -33,6 +33,7 @@
 #include <QCoreApplication>
 
 class QBitArray;
+class QHostAddress;
 
 namespace BitTorrent
 {
@@ -56,6 +57,11 @@ namespace BitTorrent
         bool isRemoteChocked() const;
         bool isSupportsExtensions() const;
         bool isLocalConnection() const;
+        bool isRelayed() const;
+        QString relayName() const;
+
+        static bool isRelayedEndpoint(const QHostAddress &address, const QString &relayName);
+        static QString relayNameForIncomingAddress(const QHostAddress &address);
 
         bool isHandshake() const;
         bool isConnecting() const;

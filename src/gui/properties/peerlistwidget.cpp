@@ -442,14 +442,20 @@ void PeerListWidget::loadPeers(const BitTorrent::Torrent *torrent)
 
                 const bool useI2PSocket = peer.useI2PSocket();
 
-                const QString peerIPString = useI2PSocket ? peer.I2PAddress() : peerEndpoint.address.ip.toString();
-                setModelData(m_listModel, row, PeerListColumns::IP, peerIPString, peerIPString, {}, peerIPString);
+                const bool isRelayed = peer.isRelayed();
+                const QString peerIPString = useI2PSocket ? peer.I2PAddress()
+                    : (isRelayed ? tr("Relayed via %1").arg(peer.relayName()) : peerEndpoint.address.ip.toString());
+                const QString peerIPTooltip = isRelayed
+                    ? tr("The original peer address is unavailable because SSH forwarding through %1 hides it.").arg(peer.relayName())
+                    : peerIPString;
+                setModelData(m_listModel, row, PeerListColumns::IP, peerIPString, peerIPString, {}, peerIPTooltip);
 
                 const QString peerIPHiddenString = useI2PSocket ? QString() : peerEndpoint.address.ip.toString();
                 setModelData(m_listModel, row, PeerListColumns::IP_HIDDEN, peerIPHiddenString, peerIPHiddenString);
 
-                const QString peerPortString = useI2PSocket ? tr("N/A") : QString::number(peer.address().port);
-                setModelData(m_listModel, row, PeerListColumns::PORT, peerPortString, peer.address().port, (Qt::AlignRight | Qt::AlignVCenter));
+                const QString peerPortString = (useI2PSocket || isRelayed) ? tr("N/A") : QString::number(peer.address().port);
+                setModelData(m_listModel, row, PeerListColumns::PORT, peerPortString, peer.address().port, (Qt::AlignRight | Qt::AlignVCenter),
+                    isRelayed ? tr("SSH forwarding through %1 hides the original peer port.").arg(peer.relayName()) : QString());
 
                 if (useI2PSocket)
                 {
@@ -531,7 +537,7 @@ void PeerListWidget::updatePeer(const int row, const BitTorrent::Torrent *torren
     setModelData(m_listModel, row, PeerListColumns::DOWNLOADING_PIECE, downloadingFilesDisplayValue
             , downloadingFilesDisplayValue, {}, downloadingFiles.join(u'\n'));
 
-    if (!peer.useI2PSocket() && m_resolveHostNames)
+    if (!peer.useI2PSocket() && !peer.isRelayed() && m_resolveHostNames)
     {
         const QHostAddress ipAddr = peer.address().ip;
         const QString hostName = Net::ReverseResolution::instance()->resolve(ipAddr);
@@ -539,7 +545,7 @@ void PeerListWidget::updatePeer(const int row, const BitTorrent::Torrent *torren
             setModelData(m_listModel, row, PeerListColumns::IP, hostName, hostName, {}, ipAddr.toString());
     }
 
-    if (m_resolveCountries)
+    if (m_resolveCountries && !peer.isRelayed())
     {
         const QIcon icon = UIThemeManager::instance()->getFlagIcon(peer.country());
         if (!icon.isNull())

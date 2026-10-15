@@ -177,16 +177,17 @@ QString GeoIPDatabase::lookup(const QHostAddress &hostAddr) const
             }
             else
             {
-                // In 28-bit nodes, each record's high nibble is packed between its low 24 bits.
+                // In 28-bit nodes, the left record's high nibble is packed between the
+                // records' low 24 bits. The right record's high nibble is in the same byte.
                 if (right)
                 {
-                    id = (static_cast<quint32>(ptr[3] & 0xF0) << 20)
+                    id = (static_cast<quint32>(ptr[3] & 0x0F) << 24)
                             | (static_cast<quint32>(ptr[4]) << 16)
                             | (static_cast<quint32>(ptr[5]) << 8) | ptr[6];
                 }
                 else
                 {
-                    id = (static_cast<quint32>(ptr[3] & 0x0F) << 24)
+                    id = (static_cast<quint32>(ptr[3] & 0xF0) << 20)
                             | (static_cast<quint32>(ptr[0]) << 16)
                             | (static_cast<quint32>(ptr[1]) << 8) | ptr[2];
                 }
@@ -201,8 +202,14 @@ QString GeoIPDatabase::lookup(const QHostAddress &hostAddr) const
                 QString country = m_countries.value(id);
                 if (country.isEmpty())
                 {
-                    const quint32 offset = id - m_nodeCount - sizeof(DATA_SECTION_SEPARATOR);
-                    quint32 tmp = offset + m_indexSize + sizeof(DATA_SECTION_SEPARATOR);
+                    if (static_cast<quint64>(id) < (static_cast<quint64>(m_nodeCount) + sizeof(DATA_SECTION_SEPARATOR)))
+                        return {};
+
+                    const quint64 dataFieldOffset = (static_cast<quint64>(id) - m_nodeCount + m_indexSize);
+                    if (dataFieldOffset >= m_size)
+                        return {};
+
+                    quint32 tmp = static_cast<quint32>(dataFieldOffset);
                     const QVariant val = readDataField(tmp);
                     if (val.userType() == QMetaType::QVariantHash)
                     {
@@ -345,7 +352,11 @@ QVariant GeoIPDatabase::readDataField(quint32 &offset) const
     {
         usePointer = true;
         // convert offset from data section to global
-        locOffset = descr.offset + (m_nodeCount * m_recordSize / 4) + sizeof(DATA_SECTION_SEPARATOR);
+        const quint64 pointerOffset = (static_cast<quint64>(descr.offset) + m_indexSize
+            + sizeof(DATA_SECTION_SEPARATOR));
+        if (pointerOffset >= m_size)
+            return {};
+        locOffset = static_cast<quint32>(pointerOffset);
         if (!readDataFieldDescriptor(locOffset, descr))
             return {};
     }
@@ -417,14 +428,16 @@ QVariant GeoIPDatabase::readDataField(quint32 &offset) const
 
 bool GeoIPDatabase::readDataFieldDescriptor(quint32 &offset, DataFieldDescriptor &out) const
 {
+    if (offset >= m_size)
+        return false;
+
+    const quint32 availSize = m_size - offset;
     const uchar *dataPtr = m_data + offset;
-    const int availSize = m_size - offset;
-    if (availSize < 1) return false;
 
     out.fieldType = static_cast<DataType>((dataPtr[0] & 0xE0) >> 5);
     if (out.fieldType == DataType::Pointer)
     {
-        const int size = ((dataPtr[0] & 0x18) >> 3);
+        const quint32 size = ((dataPtr[0] & 0x18) >> 3);
         if (availSize < (size + 2)) return false;
 
         if (size == 0)
@@ -445,8 +458,11 @@ bool GeoIPDatabase::readDataFieldDescriptor(quint32 &offset, DataFieldDescriptor
     {
         if (out.fieldType == DataType::Unknown)
         {
+            if (availSize < 3)
+                return false;
+
             out.fieldType = static_cast<DataType>(dataPtr[1] + 7);
-            if ((out.fieldType <= DataType::Map) || (out.fieldType > DataType::Float) || (availSize < 3))
+            if ((out.fieldType <= DataType::Map) || (out.fieldType > DataType::Float))
                 return false;
             offset += 2;
         }

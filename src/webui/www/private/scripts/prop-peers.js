@@ -91,6 +91,12 @@ window.qBittorrent.PropPeers ??= (() => {
                                 responseJSON["peers"][key]["ip"] = responseJSON["peers"][key]["i2p_dest"];
                                 responseJSON["peers"][key]["port"] = "N/A";
                             }
+                            else if (responseJSON["peers"][key]["is_relayed"] === true) {
+                                responseJSON["peers"][key]["ip"] = "QBT_TR(Relayed via %1)QBT_TR[CONTEXT=PeerListWidget]"
+                                    .replace("%1", responseJSON["peers"][key]["relay_name"]);
+                                responseJSON["peers"][key]["port"] = "N/A";
+                                responseJSON["peers"][key]["host_name"] = "";
+                            }
 
                             torrentPeersTable.updateRowData(responseJSON["peers"][key]);
                         }

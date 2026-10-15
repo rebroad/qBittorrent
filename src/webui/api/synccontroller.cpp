@@ -871,7 +871,9 @@ void SyncController::torrentPeersAction()
             {KEY_PEER_CONNECTION_TYPE, pi.connectionType()},
             {KEY_PEER_FLAGS, pi.flags()},
             {KEY_PEER_FLAGS_DESCRIPTION, pi.flagsDescription()},
-            {KEY_PEER_RELEVANCE, pi.relevance()}
+            {KEY_PEER_RELEVANCE, pi.relevance()},
+            {u"is_relayed"_s, pi.isRelayed()},
+            {u"relay_name"_s, pi.relayName()}
         };
 
         if (torrent->hasMetadata())
@@ -891,14 +893,14 @@ void SyncController::torrentPeersAction()
         }
         else
         {
-            peer[KEY_PEER_IP] = pi.address().ip.toString();
-            peer[KEY_PEER_PORT] = pi.address().port;
+            peer[KEY_PEER_IP] = pi.isRelayed() ? QString() : pi.address().ip.toString();
+            peer[KEY_PEER_PORT] = pi.isRelayed() ? QVariant() : QVariant(pi.address().port);
 
-            peer[KEY_PEER_HOST_NAME] = resolvePeerHostNames
+            peer[KEY_PEER_HOST_NAME] = (resolvePeerHostNames && !pi.isRelayed())
                 ? Net::ReverseResolution::instance()->resolve(pi.address().ip)
                 : QString();
 
-            if (resolvePeerCountries)
+            if (resolvePeerCountries && !pi.isRelayed())
             {
                 peer[KEY_PEER_COUNTRY_CODE] = pi.country().toLower();
                 peer[KEY_PEER_COUNTRY] = Net::GeoIPManager::CountryName(pi.country());

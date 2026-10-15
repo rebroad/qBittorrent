@@ -1,17 +1,25 @@
-# Current Goal
+# Current Goals
 
-Make qBittorrent automatically keep downloading on this computer when direct BitTorrent connectivity is insufficient, using exactly one relay at a time: pi3 is the current primary because its inbound path is verified; bigquiet is the failover when it is reachable and configured for the same routing.
+## Fix the qBittorrent crash
 
-## Requirements
+Diagnose and fix the qBittorrent SIGSEGV observed at 19:08:01 on 2026-10-15 after deploying the Proxied-status build. Preserve the prior working binary until the crash is understood. Keep core-dump or GDB capture reliable, use the captured crash evidence to identify the root cause, fix it in source, build and verify the fix, then redeploy only after validation.
 
-- Keep qBittorrent as the only torrent client for the download. Torrent data and downloaded files stay on this computer; pi3 and bigquiet must not download a second copy as part of the relay.
-- Keep normal local qBittorrent downloads and file handling on this computer.
-- Integrate relay startup, health monitoring, failover, and shutdown with qBittorrent's normal lifecycle.
-- Select either pi3 or bigquiet, never route through both. On relay change, move the router's UPnP port mapping to the selected relay and update qBittorrent's advertised address.
-- Provide the network path qBittorrent needs when direct connectivity fails, including TCP and UDP tracker, DHT, uTP, and peer traffic. On pi3, route UDP through the VPN when qBittorrent is bound to `tun-qbt`; do not advertise a UDP mapping for a relay mode that cannot forward it.
-- Keep the existing TCP incoming-peer reverse tunnel where useful, and use outbound peer proxying when it improves reachability.
-- When outbound peer traffic is actively and successfully routed through the selected relay, have qBittorrent report `Proxied` with a clear proxy icon instead of reporting only `Firewalled`. Show that state only while real peer proxying is verified healthy; clear it when the path fails or only tracker proxying is active. If qBittorrent has no suitable native indicator, add one to its UI.
-- Automatically handle UDP-only magnets and stalled existing torrents, including adding/reannouncing TCP trackers when those are the available fallback.
-- Verify the selected relay, router mapping, local qBittorrent listener, outbound tracker/peer route, relay failover, local download behavior, and the `Proxied` text/icon during successful peer proxying (including that it clears on proxy failure), without running a second torrent client.
+## Show relayed peer connections accurately
 
-See [GOAL_PROGRESS.md](GOAL_PROGRESS.md) for current implementation status, verification evidence, and remaining work.
+When a peer connection is carried through the selected pi3 or bigquiet SSH relay, show it in the peer list and WebUI as `Relayed via pi3` or `Relayed via bigquiet` instead of showing this computer's local SSH-forward socket address as if it were the other peer's address. Show an original peer IP or port only when the transport provides it reliably.
+
+Report `Proxied` while a real peer connection is verified to use the SSH-forwarded relay path or an enabled outbound peer proxy. Report `Firewalled` when no proxied peer connection is active and direct incoming connectivity is unavailable. An idle relay or tracker-only proxy must not set `Proxied`; clear the state when the peer path disconnects or fails.
+
+## Preserve the relay operating model
+
+Keep qBittorrent as the only torrent client for downloads. Use exactly one relay at a time: pi3 is primary and bigquiet is failover. Torrent data and downloaded files stay on this computer. Keep direct local downloads, relay lifecycle integration, router mapping failover, and the TCP/UDP peer and tracker routing requirements already verified in [GOAL_PROGRESS.md](GOAL_PROGRESS.md).
+
+## Completion evidence
+
+- Capture and inspect the original crash with symbols, identify its concrete root cause, and add focused regression coverage.
+- Build and run the focused tests; verify qBittorrent remains stable with the fix before replacing the production binary.
+- Verify that an active incoming SSH-forwarded peer is shown as relayed rather than as this host's IP, and that the connection indicator reports `Proxied` only while peer traffic is actually using the relay or peer proxy.
+- Verify the status clears after the relayed/proxied peer disconnects or the path fails, and remains clear for tracker-only proxying.
+- Recheck the relay routing and single-relay behavior recorded in [GOAL_PROGRESS.md](GOAL_PROGRESS.md).
+
+See [GOAL_PROGRESS.md](GOAL_PROGRESS.md) for implementation status, evidence, and remaining work.

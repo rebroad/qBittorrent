@@ -2258,6 +2258,10 @@ Use ';' to split multiple entries. Can use wildcard '*'.</source>
         <translation type="unfinished" />
     </message>
     <message>
+        <source>Relayed via %1</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
         <source>Flags</source>
         <translation type="unfinished" />
     </message>

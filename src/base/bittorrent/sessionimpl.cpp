@@ -108,6 +108,7 @@
 #include "loadtorrentparams.h"
 #include "lttypecast.h"
 #include "nativesessionextension.h"
+#include "peerinfo.h"
 #include "portforwarderimpl.h"
 #include "resumedatastorage.h"
 #include "torrentcontentremover.h"
@@ -135,6 +136,15 @@ namespace
     {
         return (socketType == lt::socket_type_t::socks5) || (socketType == lt::socket_type_t::http)
             || (socketType == lt::socket_type_t::socks5_ssl) || (socketType == lt::socket_type_t::http_ssl);
+    }
+
+    bool isRelayedIncomingPeer(const lt::peer_connect_alert *alert)
+    {
+        if (alert->direction != lt::peer_connect_alert::direction_t::in)
+            return false;
+
+        const QHostAddress peerAddress {QString::fromStdString(alert->endpoint.address().to_string())};
+        return !PeerInfo::relayNameForIncomingAddress(peerAddress).isEmpty();
     }
 
     QString peerConnectionKey(const lt::peer_alert *alert)
@@ -5966,7 +5976,9 @@ void SessionImpl::handleAlert(lt::alert *alert)
         case lt::peer_connect_alert::alert_type:
         {
             const auto *peerAlert = static_cast<const lt::peer_connect_alert *>(alert);
-            if ((peerAlert->direction == lt::peer_connect_alert::direction_t::out) && isProxySocket(peerAlert->socket_type))
+            const bool isOutboundProxy = (peerAlert->direction == lt::peer_connect_alert::direction_t::out)
+                && isProxySocket(peerAlert->socket_type);
+            if (isOutboundProxy || isRelayedIncomingPeer(peerAlert))
             {
                 m_proxiedPeerConnections[peerAlert->handle].insert(peerConnectionKey(peerAlert));
                 m_status.hasProxiedPeerConnections = true;
@@ -5976,15 +5988,12 @@ void SessionImpl::handleAlert(lt::alert *alert)
         case lt::peer_disconnected_alert::alert_type:
         {
             const auto *peerAlert = static_cast<const lt::peer_disconnected_alert *>(alert);
-            if (isProxySocket(peerAlert->socket_type))
+            auto torrentIt = m_proxiedPeerConnections.find(peerAlert->handle);
+            if (torrentIt != m_proxiedPeerConnections.end())
             {
-                auto torrentIt = m_proxiedPeerConnections.find(peerAlert->handle);
-                if (torrentIt != m_proxiedPeerConnections.end())
-                {
-                    torrentIt->remove(peerConnectionKey(peerAlert));
-                    if (torrentIt->isEmpty())
-                        m_proxiedPeerConnections.erase(torrentIt);
-                }
+                torrentIt->remove(peerConnectionKey(peerAlert));
+                if (torrentIt->isEmpty())
+                    m_proxiedPeerConnections.erase(torrentIt);
                 m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
             }
             break;
