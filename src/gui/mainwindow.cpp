@@ -28,6 +28,7 @@
  */
 
 #include "mainwindow.h"
+#include "app/exitreason.h"
 
 #include <QtSystemDetection>
 
@@ -1234,6 +1235,7 @@ void MainWindow::closeEvent(QCloseEvent *e)
 
     // Accept exit
     e->accept();
+    recordExitReason(u"main window close accepted; requester not identified"_s);
     qApp->exit();
 }
 

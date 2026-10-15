@@ -30,6 +30,7 @@
  */
 
 #include "appcontroller.h"
+#include "app/exitreason.h"
 
 #include <algorithm>
 #include <chrono>
@@ -137,6 +138,7 @@ void AppController::shutdownAction()
     // actually shutting down.
     QTimer::singleShot(100ms, Qt::CoarseTimer, qApp, []
     {
+        recordExitReason(u"WebUI /api/v2/app/shutdown request; requester not identified"_s);
         QCoreApplication::exit();
     });
     setResult(QString());

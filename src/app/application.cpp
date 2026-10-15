@@ -28,6 +28,7 @@
  */
 
 #include "application.h"
+#include "exitreason.h"
 
 #include <algorithm>
 
@@ -822,6 +823,7 @@ void Application::allTorrentsFinished()
     }
 
     qDebug("Exiting the application");
+    recordExitReason(u"all downloads completed and automatic application exit is enabled"_s);
     exit();
 }
 
@@ -882,6 +884,7 @@ int Application::exec()
     actionExit->setShortcut(Qt::CTRL | Qt::Key_Q);
     connect(actionExit, &QAction::triggered, this, []
     {
+        recordExitReason(u"user selected the tray menu Exit action"_s);
         QApplication::exit();
     });
     desktopIntegrationMenu->addAction(actionExit);
@@ -1040,6 +1043,7 @@ void Application::createStartupProgressDialog()
 
     connect(m_startupProgressDialog, &QProgressDialog::canceled, this, []()
     {
+        recordExitReason(u"user cancelled startup progress"_s);
         QApplication::exit();
     });
 
@@ -1206,6 +1210,7 @@ void Application::shutdownCleanup([[maybe_unused]] QSessionManager &manager)
     // and the user clicks "Cancel", it will result in qbt being
     // killed and the shutdown proceeding instead. Apparently
     // aboutToQuit() is emitted too late in the shutdown process.
+    recordExitReason(u"operating system session shutdown request"_s);
     cleanup();
 
     // According to the qt docs we shouldn't call quit() inside a slot.
@@ -1362,6 +1367,10 @@ void Application::cleanup()
     if (m_isCleanupRun.exchange(true, std::memory_order_acquire))
         return;
 
+    QString exitReason = property("qBittorrentExitReason").toString();
+    if (exitReason.isEmpty())
+        exitReason = u"qBittorrent terminated without a recorded application exit request; initiator unknown"_s;
+    qInfo().noquote() << "qBittorrent exit reason:" << exitReason;
     LogMsg(tr("qBittorrent termination initiated"));
 
 #ifndef DISABLE_GUI

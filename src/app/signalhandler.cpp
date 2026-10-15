@@ -29,6 +29,7 @@
  */
 
 #include "signalhandler.h"
+#include "exitreason.h"
 
 #include <QtSystemDetection>
 
@@ -89,7 +90,12 @@ namespace
         const char *msgs[] = {"Catching signal: ", sysSigName[signum], "\nExiting cleanly\n"};
         std::ranges::for_each(msgs, safePrint);
         signal(signum, SIG_DFL);
-        QMetaObject::invokeMethod(qApp, [] { QCoreApplication::exit(); }, Qt::QueuedConnection);  // unsafe, but exit anyway
+        QMetaObject::invokeMethod(qApp, [signum]
+        {
+            recordExitReason(QStringLiteral("received %1 (sender unknown to qBittorrent); requesting clean shutdown")
+                .arg(QString::fromLatin1(sysSigName[signum])));
+            QCoreApplication::exit();
+        }, Qt::QueuedConnection);  // unsafe, but exit anyway
     }
 
 #ifdef STACKTRACE
