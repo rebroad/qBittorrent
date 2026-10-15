@@ -189,9 +189,21 @@ namespace
         map[KEY_TRANSFER_LAST_EXTERNAL_ADDRESS_V4] = session->lastExternalIPv4Address();
         map[KEY_TRANSFER_LAST_EXTERNAL_ADDRESS_V6] = session->lastExternalIPv6Address();
         map[KEY_TRANSFER_DHT_NODES] = sessionStatus.dhtNodes;
-        map[KEY_TRANSFER_CONNECTION_STATUS] = session->isListening()
-            ? (sessionStatus.hasIncomingConnections ? u"connected"_s : u"firewalled"_s)
-            : u"disconnected"_s;
+        switch (sessionStatus.connectionStatus(session->isListening()))
+        {
+        case BitTorrent::ConnectionStatus::Connected:
+            map[KEY_TRANSFER_CONNECTION_STATUS] = u"connected"_s;
+            break;
+        case BitTorrent::ConnectionStatus::Firewalled:
+            map[KEY_TRANSFER_CONNECTION_STATUS] = u"firewalled"_s;
+            break;
+        case BitTorrent::ConnectionStatus::Proxied:
+            map[KEY_TRANSFER_CONNECTION_STATUS] = u"proxied"_s;
+            break;
+        case BitTorrent::ConnectionStatus::Disconnected:
+            map[KEY_TRANSFER_CONNECTION_STATUS] = u"disconnected"_s;
+            break;
+        }
 
         return map;
     }

@@ -30,6 +30,14 @@ This file records implementation state and verification evidence for [GOAL.md](G
 - qBittorrent has 13 torrents and none are incomplete. No qBittorrent or Transmission client is running on pi3 or bigquiet. With no incomplete download to recover, the monitor has no active fallback state; the previously recorded controlled pi3 outage and Bigquiet local-download test verify automatic failover behavior.
 - The previous implementation changes are pushed. The live audit above predates the newly added `Proxied` status/icon requirement.
 
+## Proxied status implementation and verification (2026-10-15)
+
+- Added a shared connection-status mapping with `Proxied` precedence when an outbound peer connection has completed successfully through libtorrent's SOCKS5 or HTTP proxy socket. Track peers from successful outgoing `peer_connect_alert`s, remove them on disconnect/error, and clear tracking when proxy settings change or libtorrent reports dropped alerts. Tracker replies and the proxy-enabled setting alone do not set the status.
+- The desktop status bar and both WebUI API status paths now report `proxied`; the desktop tooltip and WebUI accessible label/title say `Connection status: Proxied`. Added a proxy-specific icon to the desktop theme and WebUI assets.
+- Built the application in `/mnt/kingston/builds/rebroad/src/qBittorrent.build/qb-build`. The `qbt_app` target and `testsessionstatus` built successfully; the focused CTest passed.
+- Verified the built client in an isolated local profile with the existing SOCKS endpoint (`127.0.0.1:1089`) and an official Debian 13.7 netinst test torrent. With no proxy peers connected, both APIs reported `firewalled`. After enabling peer proxying and observing real peer connections, `sync/maindata` reported `proxied` and the WebUI showed the Proxied label/icon. Changing only the test profile's SOCKS port to an unused port cleared the status back to `firewalled` in both API and WebUI. No torrent payload was downloaded; the test process, profile, and torrent file were removed afterward.
+- The production qBittorrent process remains the previously installed `/usr/local/bin/qbittorrent`; its live API still reports `proxy_peer_connections=false` and `connection_status=firewalled`. The new implementation has not yet been installed into that root-owned path or verified in the production process.
+
 ## Remaining work
 
-- Add a qBittorrent `Proxied` status and clear proxy icon that reflect successfully working outbound peer proxying through the selected relay. Do not show it merely because tracker proxying or a proxy setting is enabled, and clear it when peer proxying fails. Verify the UI state and icon against real peer traffic and a proxy-path failure. The latest live API check showed `proxy_peer_connections=false`, `connection_status=firewalled`, and zero DHT nodes, so this requirement is not yet met.
+- Roll out the built qBittorrent implementation to the production process and verify its desktop/API status with the selected relay. The source build and isolated real-peer UI checks pass; the currently installed root-owned binary does not yet contain this change.

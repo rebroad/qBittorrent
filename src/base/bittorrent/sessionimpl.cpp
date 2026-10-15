@@ -131,6 +131,20 @@ namespace
     const auto USER_AGENT = QStringLiteral("qBittorrent/" QBT_VERSION_2);
     const QString DEFAULT_DHT_BOOTSTRAP_NODES = u"dht.libtorrent.org:25401, dht.transmissionbt.com:6881, router.bittorrent.com:6881"_s;
 
+    bool isProxySocket(const lt::socket_type_t socketType)
+    {
+        return (socketType == lt::socket_type_t::socks5) || (socketType == lt::socket_type_t::http)
+            || (socketType == lt::socket_type_t::socks5_ssl) || (socketType == lt::socket_type_t::http_ssl);
+    }
+
+    QString peerConnectionKey(const lt::peer_alert *alert)
+    {
+        const std::string peerID = alert->pid.to_string();
+        return u"%1:%2:%3"_s.arg(QString::fromStdString(alert->endpoint.address().to_string()))
+            .arg(alert->endpoint.port())
+            .arg(QString::fromLatin1(peerID.data(), static_cast<qsizetype>(peerID.size())));
+    }
+
     void torrentQueuePositionUp(const lt::torrent_handle &handle)
     {
         try
@@ -645,7 +659,11 @@ SessionImpl::SessionImpl(QObject *parent)
 
     connect(Net::ProxyConfigurationManager::instance()
         , &Net::ProxyConfigurationManager::proxyConfigurationChanged
-        , this, &SessionImpl::configureDeferred);
+        , this, [this]
+        {
+            clearProxiedPeerConnections();
+            configureDeferred();
+        });
 
     m_freeDiskSpaceChecker->moveToThread(m_ioThread.get());
     connect(m_ioThread.get(), &QThread::finished, m_freeDiskSpaceChecker, &QObject::deleteLater);
@@ -1875,6 +1893,7 @@ lt::settings_pack SessionImpl::loadLTSettings() const
     lt::settings_pack settingsPack;
 
     const lt::alert_category_t alertMask = lt::alert::error_notification
+        | lt::alert::connect_notification
         | lt::alert::file_progress_notification
         | lt::alert::ip_block_notification
         | lt::alert::peer_notification
@@ -3930,6 +3949,7 @@ void SessionImpl::setProxyPeerConnectionsEnabled(const bool enabled)
     if (enabled != isProxyPeerConnectionsEnabled())
     {
         m_isProxyPeerConnectionsEnabled = enabled;
+        clearProxiedPeerConnections();
         configureDeferred();
     }
 }
@@ -5943,6 +5963,45 @@ void SessionImpl::handleAlert(lt::alert *alert)
         case lt::session_stats_alert::alert_type:
             handleSessionStatsAlert(static_cast<const lt::session_stats_alert *>(alert));
             break;
+        case lt::peer_connect_alert::alert_type:
+        {
+            const auto *peerAlert = static_cast<const lt::peer_connect_alert *>(alert);
+            if ((peerAlert->direction == lt::peer_connect_alert::direction_t::out) && isProxySocket(peerAlert->socket_type))
+            {
+                m_proxiedPeerConnections[peerAlert->handle].insert(peerConnectionKey(peerAlert));
+                m_status.hasProxiedPeerConnections = true;
+            }
+            break;
+        }
+        case lt::peer_disconnected_alert::alert_type:
+        {
+            const auto *peerAlert = static_cast<const lt::peer_disconnected_alert *>(alert);
+            if (isProxySocket(peerAlert->socket_type))
+            {
+                auto torrentIt = m_proxiedPeerConnections.find(peerAlert->handle);
+                if (torrentIt != m_proxiedPeerConnections.end())
+                {
+                    torrentIt->remove(peerConnectionKey(peerAlert));
+                    if (torrentIt->isEmpty())
+                        m_proxiedPeerConnections.erase(torrentIt);
+                }
+                m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
+            }
+            break;
+        }
+        case lt::peer_error_alert::alert_type:
+        {
+            const auto *peerAlert = static_cast<const lt::peer_error_alert *>(alert);
+            auto torrentIt = m_proxiedPeerConnections.find(peerAlert->handle);
+            if (torrentIt != m_proxiedPeerConnections.end())
+            {
+                torrentIt->remove(peerConnectionKey(peerAlert));
+                if (torrentIt->isEmpty())
+                    m_proxiedPeerConnections.erase(torrentIt);
+                m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
+            }
+            break;
+        }
         case lt::tracker_announce_alert::alert_type:
         case lt::tracker_error_alert::alert_type:
         case lt::tracker_reply_alert::alert_type:
@@ -5989,8 +6048,17 @@ void SessionImpl::handleAlert(lt::alert *alert)
             handleExternalIPAlert(static_cast<const lt::external_ip_alert *>(alert));
             break;
         case lt::alerts_dropped_alert::alert_type:
-            handleAlertsDroppedAlert(static_cast<const lt::alerts_dropped_alert *>(alert));
+        {
+            const auto *droppedAlert = static_cast<const lt::alerts_dropped_alert *>(alert);
+            if (droppedAlert->dropped_alerts.test(lt::peer_connect_alert::alert_type)
+                || droppedAlert->dropped_alerts.test(lt::peer_disconnected_alert::alert_type)
+                || droppedAlert->dropped_alerts.test(lt::peer_error_alert::alert_type))
+            {
+                clearProxiedPeerConnections();
+            }
+            handleAlertsDroppedAlert(droppedAlert);
             break;
+        }
         case lt::storage_moved_alert::alert_type:
             handleStorageMovedAlert(static_cast<const lt::storage_moved_alert *>(alert));
             break;
@@ -6014,6 +6082,12 @@ void SessionImpl::handleAlert(lt::alert *alert)
     {
         qWarning() << "Caught exception in " << Q_FUNC_INFO << ": " << QString::fromStdString(exc.what());
     }
+}
+
+void SessionImpl::clearProxiedPeerConnections()
+{
+    m_proxiedPeerConnections.clear();
+    m_status.hasProxiedPeerConnections = false;
 }
 
 TorrentImpl *SessionImpl::createTorrent(const lt::torrent_handle &nativeHandle, LoadTorrentParams params)
@@ -6055,8 +6129,11 @@ QList<TorrentImpl *> SessionImpl::getQueuedTorrentsByID(const QList<TorrentID> &
     return queuedTorrents;
 }
 
-void SessionImpl::handleTorrentRemovedAlert(const lt::torrent_removed_alert */*alert*/)
+void SessionImpl::handleTorrentRemovedAlert(const lt::torrent_removed_alert *alert)
 {
+    m_proxiedPeerConnections.remove(alert->handle);
+    m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
+
     // We cannot consider `torrent_removed_alert` as a starting point for removing content,
     // because it has an inconsistent posting time between different versions of libtorrent,
     // so files may still be in use in some cases.

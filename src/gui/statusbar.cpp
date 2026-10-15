@@ -194,29 +194,30 @@ void StatusBar::showRestartRequired()
 
 void StatusBar::updateConnectionStatus()
 {
-    const BitTorrent::SessionStatus &sessionStatus = BitTorrent::Session::instance()->status();
+    const auto *session = BitTorrent::Session::instance();
+    const BitTorrent::SessionStatus &sessionStatus = session->status();
 
-    if (!BitTorrent::Session::instance()->isListening())
+    switch (sessionStatus.connectionStatus(session->isListening()))
+    {
+    case BitTorrent::ConnectionStatus::Disconnected:
     {
         m_connecStatusLblIcon->setIcon(UIThemeManager::instance()->getIcon(u"disconnected"_s));
         const QString tooltip = u"<b>%1</b><br>%2"_s.arg(tr("Connection Status:"), tr("Offline. This usually means that qBittorrent failed to listen on the selected port for incoming connections."));
         m_connecStatusLblIcon->setToolTip(tooltip);
+        break;
     }
-    else
-    {
-        if (sessionStatus.hasIncomingConnections)
-        {
-            // Connection OK
-            m_connecStatusLblIcon->setIcon(UIThemeManager::instance()->getIcon(u"connected"_s));
-            const QString tooltip = u"<b>%1</b><br>%2"_s.arg(tr("Connection Status:"), tr("Online"));
-            m_connecStatusLblIcon->setToolTip(tooltip);
-        }
-        else
-        {
-            m_connecStatusLblIcon->setIcon(UIThemeManager::instance()->getIcon(u"firewalled"_s));
-            const QString tooltip = u"<b>%1</b><br><i>%2</i>"_s.arg(tr("Connection Status:"), tr("No direct connections. This may indicate network configuration problems."));
-            m_connecStatusLblIcon->setToolTip(tooltip);
-        }
+    case BitTorrent::ConnectionStatus::Connected:
+        m_connecStatusLblIcon->setIcon(UIThemeManager::instance()->getIcon(u"connected"_s));
+        m_connecStatusLblIcon->setToolTip(u"<b>%1</b><br>%2"_s.arg(tr("Connection Status:"), tr("Online")));
+        break;
+    case BitTorrent::ConnectionStatus::Firewalled:
+        m_connecStatusLblIcon->setIcon(UIThemeManager::instance()->getIcon(u"firewalled"_s));
+        m_connecStatusLblIcon->setToolTip(u"<b>%1</b><br><i>%2</i>"_s.arg(tr("Connection Status:"), tr("No direct connections. This may indicate network configuration problems.")));
+        break;
+    case BitTorrent::ConnectionStatus::Proxied:
+        m_connecStatusLblIcon->setIcon(UIThemeManager::instance()->getIcon(u"proxied"_s));
+        m_connecStatusLblIcon->setToolTip(u"<b>%1</b><br>%2"_s.arg(tr("Connection Status:"), tr("Successfully connected to peers through the proxy.")));
+        break;
     }
 }
 

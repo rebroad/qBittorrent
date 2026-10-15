@@ -79,10 +79,21 @@ void TransferController::infoAction()
     dict[KEY_TRANSFER_LAST_EXTERNAL_ADDRESS_V4] = btSession->lastExternalIPv4Address();
     dict[KEY_TRANSFER_LAST_EXTERNAL_ADDRESS_V6] = btSession->lastExternalIPv6Address();
     dict[KEY_TRANSFER_DHT_NODES] = static_cast<qint64>(sessionStatus.dhtNodes);
-    if (!btSession->isListening())
+    switch (sessionStatus.connectionStatus(btSession->isListening()))
+    {
+    case BitTorrent::ConnectionStatus::Connected:
+        dict[KEY_TRANSFER_CONNECTION_STATUS] = u"connected"_s;
+        break;
+    case BitTorrent::ConnectionStatus::Firewalled:
+        dict[KEY_TRANSFER_CONNECTION_STATUS] = u"firewalled"_s;
+        break;
+    case BitTorrent::ConnectionStatus::Proxied:
+        dict[KEY_TRANSFER_CONNECTION_STATUS] = u"proxied"_s;
+        break;
+    case BitTorrent::ConnectionStatus::Disconnected:
         dict[KEY_TRANSFER_CONNECTION_STATUS] = u"disconnected"_s;
-    else
-        dict[KEY_TRANSFER_CONNECTION_STATUS] = sessionStatus.hasIncomingConnections ? u"connected"_s : u"firewalled"_s;
+        break;
+    }
 
     setResult(dict);
 }

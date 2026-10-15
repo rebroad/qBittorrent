@@ -1187,6 +1187,11 @@ window.addEventListener("DOMContentLoaded", async (event) => {
                 document.getElementById("connectionStatus").alt = "QBT_TR(Connection status: Firewalled)QBT_TR[CONTEXT=MainWindow]";
                 document.getElementById("connectionStatus").title = "QBT_TR(Connection status: Firewalled)QBT_TR[CONTEXT=MainWindow]";
                 break;
+            case "proxied":
+                document.getElementById("connectionStatus").src = "images/proxied.svg";
+                document.getElementById("connectionStatus").alt = "QBT_TR(Connection status: Proxied)QBT_TR[CONTEXT=MainWindow]";
+                document.getElementById("connectionStatus").title = "QBT_TR(Connection status: Proxied)QBT_TR[CONTEXT=MainWindow]";
+                break;
             default:
                 document.getElementById("connectionStatus").src = "images/disconnected.svg";
                 document.getElementById("connectionStatus").alt = "QBT_TR(Connection status: Disconnected)QBT_TR[CONTEXT=MainWindow]";

@@ -10337,6 +10337,10 @@ Click the &quot;Search plugins...&quot; button at the bottom right of the window
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Successfully connected to peers through the proxy.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../gui/statusbar.cpp" line="240"/>
         <source>Free space: </source>
         <translation type="unfinished"></translation>

@@ -150,6 +150,7 @@ inline QSet<QString> defaultUIThemeIcons()
         u"filter-inactive"_s,
         u"filter-stalled"_s,
         u"firewalled"_s,
+        u"proxied"_s,
         u"folder-documents"_s,
         u"folder-new"_s,
         u"folder-remote"_s,

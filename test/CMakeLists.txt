@@ -13,6 +13,7 @@ set(testFiles
     testconceptsstringable.cpp
     testglobal.cpp
     testorderedset.cpp
+    testsessionstatus.cpp
     testpath.cpp
     testutilsbytearray.cpp
     testutilscompare.cpp

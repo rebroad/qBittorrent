@@ -32,9 +32,29 @@
 
 namespace BitTorrent
 {
+    enum class ConnectionStatus
+    {
+        Disconnected,
+        Connected,
+        Firewalled,
+        Proxied
+    };
+
     struct SessionStatus
     {
         bool hasIncomingConnections = false;
+        bool hasProxiedPeerConnections = false;
+
+        ConnectionStatus connectionStatus(const bool isListening) const
+        {
+            if (!isListening)
+                return ConnectionStatus::Disconnected;
+
+            if (hasProxiedPeerConnections)
+                return ConnectionStatus::Proxied;
+
+            return hasIncomingConnections ? ConnectionStatus::Connected : ConnectionStatus::Firewalled;
+        }
 
         // Current download rate for the BT
         // session. Payload means that it only take into

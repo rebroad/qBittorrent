@@ -730,6 +730,10 @@
         <translation type="unfinished" />
     </message>
     <message>
+        <source>Connection status: Proxied</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
         <source>Alternative speed limits: Off</source>
         <translation type="unfinished" />
     </message>

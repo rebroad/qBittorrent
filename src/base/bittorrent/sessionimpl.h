@@ -584,6 +584,7 @@ namespace BitTorrent
         void exportTorrentFile(const Torrent *torrent, const Path &folderPath);
 
         void handleAlert(lt::alert *alert);
+        void clearProxiedPeerConnections();
         void handleAddTorrentAlert(const lt::add_torrent_alert *alert);
         void handleStateUpdateAlert(const lt::state_update_alert *alert);
         void handleMetadataReceivedAlert(const lt::metadata_received_alert *alert);
@@ -857,6 +858,8 @@ namespace BitTorrent
         // (torrent.tracker_name.tracker_local_endpoint.protocol_version.num_peers)
         QHash<lt::torrent_handle, QHash<std::string, QHash<lt::tcp::endpoint, QMap<int, int>>>> m_updatedTrackerStatuses;
         QMutex m_updatedTrackerStatusesMutex;
+
+        QHash<lt::torrent_handle, QSet<QString>> m_proxiedPeerConnections;
 
         // I/O errored torrents
         QSet<TorrentID> m_recentErroredTorrents;

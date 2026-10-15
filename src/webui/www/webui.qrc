@@ -43,6 +43,7 @@
         <file>private/images/filter-inactive.svg</file>
         <file>private/images/filter-stalled.svg</file>
         <file>private/images/firewalled.svg</file>
+        <file>private/images/proxied.svg</file>
         <file>private/images/flags/ad.svg</file>
         <file>private/images/flags/ae.svg</file>
         <file>private/images/flags/af.svg</file>
