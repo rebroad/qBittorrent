@@ -10,7 +10,9 @@ QBITTORRENT_SRC="${1:-$HOME/src/qBittorrent}"
 QT_VERSION="${QT_VERSION:-6.6.3}"
 QT_DIR="${QT_DIR:-$HOME/Qt}"
 QT_PREFIX="$QT_DIR/$QT_VERSION/gcc_64"
-BUILD_DIR_NAME="${BUILD_DIR_NAME:-build-qt663}"
+BUILD_DIR_NAME="${BUILD_DIR_NAME:-qb-build}"
+BUILD_ROOT="${QBITTORRENT_BUILD_ROOT:-/mnt/kingston/builds/rebroad/src/qBittorrent.build}"
+BUILD_DIR="${QBITTORRENT_BUILD_DIR:-$BUILD_ROOT/$BUILD_DIR_NAME}"
 
 echo "=== qBittorrent build script ==="
 echo "Source: $QBITTORRENT_SRC"
@@ -81,7 +83,6 @@ if [ ! -d "$QBITTORRENT_SRC" ]; then
   exit 1
 fi
 
-BUILD_DIR="$QBITTORRENT_SRC/$BUILD_DIR_NAME"
 echo ">>> Configuring qBittorrent in $BUILD_DIR..."
 mkdir -p "$BUILD_DIR"
 cmake -S "$QBITTORRENT_SRC" -B "$BUILD_DIR" \
