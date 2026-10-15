@@ -168,14 +168,22 @@ QString GeoIPDatabase::lookup(const QHostAddress &hostAddr) const
         for (int j = 0; j < 8; ++j)
         {
             const bool right = static_cast<bool>((addr[i] >> (7 - j)) & 1);
-            // Interpret the left/right record as number
-            if (right)
-                ptr += m_recordBytes;
-
             quint32 id = 0;
-            auto *idPtr = reinterpret_cast<uchar *>(&id);
-            memcpy(&idPtr[4 - m_recordBytes], ptr, m_recordBytes);
-            fromBigEndian(idPtr, 4);
+            if (m_recordSize == 24)
+            {
+                const uchar *record = ptr + (right ? 3 : 0);
+                id = (static_cast<quint32>(record[0]) << 16)
+                        | (static_cast<quint32>(record[1]) << 8) | record[2];
+            }
+            else
+            {
+                const int firstBit = right ? m_recordSize : 0;
+                for (int bit = 0; bit < m_recordSize; ++bit)
+                {
+                    const int bitOffset = firstBit + bit;
+                    id = (id << 1) | ((ptr[bitOffset / 8] >> (7 - (bitOffset % 8))) & 1);
+                }
+            }
 
             if (id == m_nodeCount)
             {
@@ -254,13 +262,12 @@ bool GeoIPDatabase::parseMetadata(const QVariantHash &metadata, QString &error)
 
     CHECK_METADATA_REQ(u"record_size"_s, UShort);
     m_recordSize = metadata.value(u"record_size"_s).value<quint16>();
-    if (m_recordSize != 24)
+    if ((m_recordSize != 24) && (m_recordSize != 28))
     {
         error = tr("Unsupported record size: %1").arg(m_recordSize);
         return false;
     }
-    m_nodeSize = m_recordSize / 4;
-    m_recordBytes = m_nodeSize / 2;
+    m_nodeSize = (m_recordSize * 2) / 8;
 
     CHECK_METADATA_REQ(u"node_count"_s, UInt);
     m_nodeCount = metadata.value(u"node_count"_s).value<quint32>();
@@ -282,7 +289,7 @@ bool GeoIPDatabase::loadDB(QString &error) const
 {
     qDebug() << "Parsing IP geolocation database index tree...";
 
-    const int nodeSize = m_recordSize / 4; // in bytes
+    const int nodeSize = (m_recordSize * 2) / 8; // bytes per node
     const int indexSize = m_nodeCount * nodeSize;
     if ((m_size < (indexSize + sizeof(DATA_SECTION_SEPARATOR)))
         || (memcmp(m_data + indexSize, DATA_SECTION_SEPARATOR, sizeof(DATA_SECTION_SEPARATOR)) != 0))

@@ -93,13 +93,42 @@ void GeoIPManager::loadDatabase()
     m_geoIPDatabase = GeoIPDatabase::load(filepath, error);
     if (m_geoIPDatabase)
     {
-        LogMsg(tr("IP geolocation database loaded. Type: %1. Build time: %2.")
-                                       .arg(m_geoIPDatabase->type(), m_geoIPDatabase->buildEpoch().toString()),
-                                       Log::INFO);
+        LogMsg(tr("Loaded IP geolocation database candidate. Type: %1. Build time: %2.")
+            .arg(m_geoIPDatabase->type(), m_geoIPDatabase->buildEpoch().toString()), Log::INFO);
     }
     else
     {
         LogMsg(tr("Couldn't load IP geolocation database. Reason: %1").arg(error), Log::WARNING);
+    }
+
+#ifdef Q_OS_LINUX
+    const Path geoLiteCityPath {u"/var/lib/geoip/GeoLite2-City.mmdb"_s};
+    error.clear();
+    GeoIPDatabase *geoLiteCityDatabase = nullptr;
+    if (geoLiteCityPath.exists())
+        geoLiteCityDatabase = GeoIPDatabase::load(geoLiteCityPath, error);
+    if (geoLiteCityDatabase)
+    {
+        if (!m_geoIPDatabase || (geoLiteCityDatabase->buildEpoch() > m_geoIPDatabase->buildEpoch()))
+        {
+            delete m_geoIPDatabase;
+            m_geoIPDatabase = geoLiteCityDatabase;
+        }
+        else
+        {
+            delete geoLiteCityDatabase;
+        }
+    }
+    else if (!error.isEmpty())
+    {
+        LogMsg(tr("Couldn't load MaxMind GeoLite2 City database. Reason: %1").arg(error), Log::WARNING);
+    }
+#endif
+
+    if (m_geoIPDatabase)
+    {
+        LogMsg(tr("IP geolocation database selected. Type: %1. Build time: %2.")
+            .arg(m_geoIPDatabase->type(), m_geoIPDatabase->buildEpoch().toString()), Log::INFO);
     }
 
     manageDatabaseUpdate();

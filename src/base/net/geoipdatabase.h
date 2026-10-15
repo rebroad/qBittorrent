@@ -79,7 +79,6 @@ private:
     quint32 m_nodeCount = 0;
     int m_nodeSize = 0;
     int m_indexSize = 0;
-    int m_recordBytes = 0;
     QDateTime m_buildEpoch;
     QString m_dbType;
     // Search data
