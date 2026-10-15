@@ -118,13 +118,15 @@ private:
     QVariant loadValueImpl(const QString &key, const QVariant &defaultValue = {}) const;
     void storeValueImpl(const QString &key, const QVariant &value);
     void readNativeSettings();
-    bool writeNativeSettings() const;
+    bool writeNativeSettings(const QString &name, const QVariantHash &data) const;
 
     static SettingsStorage *m_instance;
 
     const QString m_nativeSettingsName;
     bool m_dirty = false;
+    bool m_churnDirty = false;
     QVariantHash m_data;
+    QVariantHash m_churnData;
     QTimer m_timer;
     mutable QReadWriteLock m_lock;
 };

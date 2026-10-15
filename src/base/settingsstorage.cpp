@@ -43,6 +43,20 @@
 
 using namespace std::chrono_literals;
 
+namespace
+{
+    const QString CHURN_SETTINGS_NAME = u"qBittorrent-ui"_s;
+
+    bool isHighChurnKey(const QString &key)
+    {
+        return (key == u"GUI/Qt6/TorrentProperties/PeerListState"_s)
+            || (key == u"GUI/Qt6/TransferList/HeaderState"_s)
+            || (key == u"MainWindow/geometry"_s)
+            || (key == u"TorrentProperties/CurrentTab"_s)
+            || (key == u"OptionsDialog/LastViewedPage"_s);
+    }
+}
+
 SettingsStorage *SettingsStorage::m_instance = nullptr;
 
 SettingsStorage::SettingsStorage()
@@ -53,6 +67,8 @@ SettingsStorage::SettingsStorage()
     m_timer.setSingleShot(true);
     m_timer.setInterval(5s);
     connect(&m_timer, &QTimer::timeout, this, &SettingsStorage::save);
+    if (m_dirty || m_churnDirty)
+        m_timer.start();
 }
 
 SettingsStorage::~SettingsStorage()
@@ -82,31 +98,33 @@ bool SettingsStorage::save()
     // return `true` only when settings is different AND is saved successfully
 
     const QWriteLocker locker(&m_lock);  // guard for `m_dirty` too
-    if (!m_dirty) return false;
+    const bool hadDirtyData = m_dirty || m_churnDirty;
+    if (!hadDirtyData) return false;
 
-    if (!writeNativeSettings())
-    {
+    if (m_dirty && writeNativeSettings(m_nativeSettingsName, m_data))
+        m_dirty = false;
+    if (m_churnDirty && writeNativeSettings(CHURN_SETTINGS_NAME, m_churnData))
+        m_churnDirty = false;
+
+    if (m_dirty || m_churnDirty)
         m_timer.start();
-        return false;
-    }
-
-    m_dirty = false;
-    return true;
+    return hadDirtyData && !m_dirty && !m_churnDirty;
 }
 
 QVariant SettingsStorage::loadValueImpl(const QString &key, const QVariant &defaultValue) const
 {
     const QReadLocker locker(&m_lock);
-    return m_data.value(key, defaultValue);
+    return (isHighChurnKey(key) ? m_churnData : m_data).value(key, defaultValue);
 }
 
 void SettingsStorage::storeValueImpl(const QString &key, const QVariant &value)
 {
     const QWriteLocker locker(&m_lock);
-    QVariant &currentValue = m_data[key];
+    QVariantHash &data = isHighChurnKey(key) ? m_churnData : m_data;
+    QVariant &currentValue = data[key];
     if (currentValue != value)
     {
-        m_dirty = true;
+        (isHighChurnKey(key) ? m_churnDirty : m_dirty) = true;
         currentValue = value;
         m_timer.start();
     }
@@ -136,7 +154,9 @@ void SettingsStorage::readNativeSettings()
         return Path(nativeSettings->fileName());
     };
 
-    const Path newPath = deserialize(m_data, (m_nativeSettingsName + u"_new"));
+    QVariantHash loadedData;
+    bool migratedChurnData = false;
+    const Path newPath = deserialize(loadedData, (m_nativeSettingsName + u"_new"));
     if (!newPath.isEmpty())
     {
         // "_new" file is NOT empty
@@ -157,20 +177,60 @@ void SettingsStorage::readNativeSettings()
     }
     else
     {
-        deserialize(m_data, m_nativeSettingsName);
+        deserialize(loadedData, m_nativeSettingsName);
     }
+
+    for (auto i = loadedData.cbegin(); i != loadedData.cend(); ++i)
+    {
+        if (isHighChurnKey(i.key()))
+        {
+            m_churnData.insert(i.key(), i.value());
+            m_dirty = true; // Remove migrated values from the main config on save.
+            migratedChurnData = true;
+        }
+        else
+        {
+            m_data.insert(i.key(), i.value());
+        }
+    }
+
+    // Existing config files may contain these keys. Prefer the companion file
+    // when present, while retaining the old values as a migration fallback.
+    QVariantHash churnData;
+    const Path churnNewPath = deserialize(churnData, CHURN_SETTINGS_NAME + u"_new"_s);
+    if (!churnNewPath.isEmpty())
+    {
+        QString finalPathStr = churnNewPath.data();
+        const qsizetype index = finalPathStr.lastIndexOf(u"_new", -1, Qt::CaseInsensitive);
+        finalPathStr.remove(index, 4);
+        const Path finalPath {finalPathStr};
+        Utils::Fs::removeFile(finalPath);
+        Utils::Fs::renameFile(churnNewPath, finalPath);
+    }
+    else
+    {
+        deserialize(churnData, CHURN_SETTINGS_NAME);
+    }
+    for (auto i = churnData.cbegin(); i != churnData.cend(); ++i)
+    {
+        if (isHighChurnKey(i.key()))
+        {
+            m_churnData.insert(i.key(), i.value());
+        }
+    }
+    m_churnDirty = migratedChurnData;
 }
 
-bool SettingsStorage::writeNativeSettings() const
+bool SettingsStorage::writeNativeSettings(const QString &name, const QVariantHash &data) const
 {
-    std::unique_ptr<QSettings> nativeSettings = Profile::instance()->applicationSettings(m_nativeSettingsName + u"_new");
+    std::unique_ptr<QSettings> nativeSettings = Profile::instance()->applicationSettings(name + u"_new");
 
     // QSettings deletes the file before writing it out. This can result in problems
     // if the disk is full or a power outage occurs. Those events might occur
     // between deleting the file and recreating it. This is a safety measure.
     // Write everything to qBittorrent_new.ini/qBittorrent_new.conf and if it succeeds
     // replace qBittorrent.ini/qBittorrent.conf with it.
-    for (auto i = m_data.cbegin(); i != m_data.cend(); ++i)
+    for (auto i = data.cbegin(); i != data.cend(); ++i)
         nativeSettings->setValue(i.key(), i.value());
 
     nativeSettings->sync(); // Important to get error status
@@ -212,9 +272,10 @@ bool SettingsStorage::writeNativeSettings() const
 void SettingsStorage::removeValue(const QString &key)
 {
     const QWriteLocker locker(&m_lock);
-    if (m_data.remove(key))
+    const bool churnKey = isHighChurnKey(key);
+    if ((churnKey ? m_churnData : m_data).remove(key))
     {
-        m_dirty = true;
+        (churnKey ? m_churnDirty : m_dirty) = true;
         m_timer.start();
     }
 }
@@ -222,11 +283,11 @@ void SettingsStorage::removeValue(const QString &key)
 bool SettingsStorage::hasKey(const QString &key) const
 {
     const QReadLocker locker {&m_lock};
-    return m_data.contains(key);
+    return (isHighChurnKey(key) ? m_churnData : m_data).contains(key);
 }
 
 bool SettingsStorage::isEmpty() const
 {
     const QReadLocker locker {&m_lock};
-    return m_data.isEmpty();
+    return m_data.isEmpty() && m_churnData.isEmpty();
 }
