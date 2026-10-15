@@ -8,20 +8,19 @@ Make qBittorrent automatically keep downloading on this computer when direct Bit
 - Keep normal local qBittorrent downloads and file handling on this computer.
 - Integrate relay startup, health monitoring, failover, and shutdown with qBittorrent's normal lifecycle.
 - Select either pi3 or bigquiet, never route through both. On relay change, move the router's UPnP port mapping to the selected relay and update qBittorrent's advertised address.
-- Provide the network path qBittorrent needs when direct connectivity fails, including TCP and UDP BitTorrent traffic needed for tracker announces, DHT, uTP, and peer connections. The current SSH SOCKS tunnel handles TCP only; use or build a UDP-capable tunnel/relay path as needed.
+- Provide the network path qBittorrent needs when direct connectivity fails, including TCP and UDP tracker, DHT, uTP, and peer traffic. On pi3, route UDP through the VPN when qBittorrent is bound to `tun-qbt`; do not advertise a UDP mapping for a relay mode that cannot forward it.
 - Keep the existing TCP incoming-peer reverse tunnel where useful, and use outbound peer proxying when it improves reachability.
 - Automatically handle UDP-only magnets and stalled existing torrents, including adding/reannouncing TCP trackers when those are the available fallback.
 - Verify the selected relay, router mapping, local qBittorrent listener, outbound tracker/peer route, relay failover, and local download behavior without running a second torrent client.
 
 ## Current Evidence and Open Work
 
-- The pi3 TCP reverse-tunnel path currently passes the tunnel verifier: the router maps TCP 54716 to pi3 (192.168.0.11), qBittorrent advertises the router's public IP, and a TCP probe through pi3 reaches the local qBittorrent listener.
-- The stalled-download monitor automatically switched qBittorrent to pi3's OpenVPN interface after 120 seconds. The VPN egress IP is `82.1.79.142`, while ordinary host egress remains `213.122.174.139`.
-- The SOCKS fallback fetched an HTTP tracker list through pi3 and automatically added its TCP trackers to the two stalled magnets. qBittorrent's UDP tracker announces now also succeed through the VPN; several trackers return peer lists for both torrents.
-- Both local VisionQuest downloads are progressing through the pi3 VPN (last observed at 50% and 64%, each above 650 KB/s). qBittorrent reports DHT enabled, and no second torrent client was found running on pi3.
-- The fallback monitor now stores its original network/proxy settings in `~/.local/state/qBittorrent/network-fallback.json`, reloads them after a monitor restart, and keeps the relay active while incomplete torrents are still progressing.
-- The old system-level `qbittorrent-tunnel.service` that was hard-wired to bigquiet has been disabled because it competed with the pi3/bigquiet selector.
-- pi3 is reachable and runs an OpenVPN server on TCP 443. A dedicated client certificate was created for this host, and its authenticated OpenVPN client is tied to qBittorrent's system service lifecycle.
-- pi3 already forwards and SNATs the VPN subnet to the internet. qBittorrent has live TCP and UDP sockets bound to `tun-qbt` at `10.8.0.2`; VPN byte counters increase during downloads.
-- Incoming UDP/uTP is still unverified and not configured at the router: TCP 54716 maps to pi3 but UDP 54716 has no UPnP mapping. A DHT ping from pi3 to qBittorrent's UDP port timed out. The installed root firewall helper currently has port rules for `wlo1`, not `tun-qbt`, so inbound UDP may also need a firewall rule. Root firewall changes require an authenticated sudo command.
-- bigquiet is currently unreachable from this host (`ssh bigquiet` reports “No route to host”), so relay failover and its inbound permission remain unverified.
+- `qbittorrent-relay-tunnel.service` is enabled at the user manager's default target and starts the SOCKS fallback monitor. The relay script waits for the system qBittorrent service and never starts a second torrent client; it restarts after qBittorrent exits and cleans up the active router mapping.
+- The pi3 TCP reverse-tunnel verifier passes: TCP 54716 maps to pi3 (`192.168.0.11`), qBittorrent advertises `82.1.79.142`, the remote TCP probe reaches the local listener, and the router hairpin probe passes.
+- The relay's public TCP listener now stays alive across local service restarts and forwards through a stable reverse-tunnel port. This avoids a restart failure caused by a stale half-closed TCP connection holding the public port.
+- When qBittorrent is bound to `tun-qbt` at `10.8.0.2`, the relay automation adds the router's UDP 54716 mapping and pi3 DNAT/FORWARD rules to that VPN address. The host firewall helper allows TCP and UDP 54716 on `tun-qbt`. When qBittorrent returns to `wlo1`, the automation removes the UDP mapping and pi3 forwarding rules.
+- A controlled VPN-binding check confirmed qBittorrent's TCP and UDP sockets moved to `10.8.0.2`; VPN-bound HTTPS and UDP DNS egress worked. A packet capture on `tun-qbt` saw packets from public peer addresses reach qBittorrent and UDP packets leave its socket. The original `wlo1` binding was restored, UDP mapping and DNAT rules were removed, and TCP verification passed again.
+- The SOCKS fallback still adds HTTP tracker-list entries to stalled torrents. During the controlled VPN check, the selected torrent's UDP trackers continued to show timeouts or permission errors; a synthetic DHT ping did not get a reply. UDP tracker success and DHT response behavior remain open verification items.
+- Earlier runs showed the stall monitor switching to pi3's VPN after 120 seconds, with VPN egress `82.1.79.142` and normal host egress `213.122.174.139`. The fallback state file preserves the original qBittorrent network and proxy settings across monitor restarts.
+- No incomplete downloads are active now, so the current run could not verify an automatic stall-triggered download end to end. qBittorrent remains local; no second torrent client runs on pi3.
+- bigquiet is currently unreachable (`ssh bigquiet` reports “No route to host”), so its failover, UDP path, and inbound permissions remain unverified.
