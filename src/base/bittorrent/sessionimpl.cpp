@@ -147,12 +147,12 @@ namespace
         return !PeerInfo::relayNameForIncomingAddress(peerAddress).isEmpty();
     }
 
-    QString peerConnectionKey(const lt::peer_alert *alert)
+    QString peerConnectionKey(const lt::tcp::endpoint &endpoint, const lt::peer_id &peerID)
     {
-        const std::string peerID = alert->pid.to_string();
-        return u"%1:%2:%3"_s.arg(QString::fromStdString(alert->endpoint.address().to_string()))
-            .arg(alert->endpoint.port())
-            .arg(QString::fromLatin1(peerID.data(), static_cast<qsizetype>(peerID.size())));
+        const std::string peerIDString = peerID.to_string();
+        return u"%1:%2:%3"_s.arg(QString::fromStdString(endpoint.address().to_string()))
+            .arg(endpoint.port())
+            .arg(QString::fromLatin1(peerIDString.data(), static_cast<qsizetype>(peerIDString.size())));
     }
 
     void torrentQueuePositionUp(const lt::torrent_handle &handle)
@@ -5980,7 +5980,7 @@ void SessionImpl::handleAlert(lt::alert *alert)
                 && isProxySocket(peerAlert->socket_type);
             if (isOutboundProxy || isRelayedIncomingPeer(peerAlert))
             {
-                m_proxiedPeerConnections.add(peerAlert->handle, peerConnectionKey(peerAlert));
+                m_proxiedPeerConnections.add(peerAlert->handle, peerConnectionKey(peerAlert->endpoint, peerAlert->pid));
                 m_status.hasProxiedPeerConnections = true;
             }
             break;
@@ -5988,14 +5988,14 @@ void SessionImpl::handleAlert(lt::alert *alert)
         case lt::peer_disconnected_alert::alert_type:
         {
             const auto *peerAlert = static_cast<const lt::peer_disconnected_alert *>(alert);
-            m_proxiedPeerConnections.remove(peerAlert->handle, peerConnectionKey(peerAlert));
+            m_proxiedPeerConnections.remove(peerAlert->handle, peerConnectionKey(peerAlert->endpoint, peerAlert->pid));
             m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
             break;
         }
         case lt::peer_error_alert::alert_type:
         {
             const auto *peerAlert = static_cast<const lt::peer_error_alert *>(alert);
-            m_proxiedPeerConnections.remove(peerAlert->handle, peerConnectionKey(peerAlert));
+            m_proxiedPeerConnections.remove(peerAlert->handle, peerConnectionKey(peerAlert->endpoint, peerAlert->pid));
             m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
             break;
         }
@@ -6346,6 +6346,21 @@ void SessionImpl::handleSessionStatsAlert(const lt::session_stats_alert *alert)
         m_refreshEnqueued = false;
     else
         enqueueRefresh();
+
+    if (!m_proxiedPeerConnections.isEmpty())
+    {
+        QHash<lt::torrent_handle, QSet<QString>> activePeerConnections;
+        for (const lt::torrent_handle &handle : m_nativeSession->get_torrents())
+        {
+            std::vector<lt::peer_info> peers;
+            handle.get_peer_info(peers);
+            auto &peerKeys = activePeerConnections[handle];
+            for (const lt::peer_info &peer : peers)
+                peerKeys.insert(peerConnectionKey(peer.ip, peer.pid));
+        }
+        m_proxiedPeerConnections.reconcile(activePeerConnections);
+        m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
+    }
 
     const int64_t interval = lt::total_microseconds(alert->timestamp() - m_statsLastTimestamp);
     if (interval <= 0)

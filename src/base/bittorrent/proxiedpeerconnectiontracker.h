@@ -41,6 +41,26 @@ namespace BitTorrent
             m_connections.remove(torrent);
         }
 
+        void reconcile(const QHash<TorrentHandle, QSet<QString>> &activeConnections)
+        {
+            auto it = m_connections.begin();
+            while (it != m_connections.end())
+            {
+                const auto activeIt = activeConnections.constFind(it.key());
+                if (activeIt == activeConnections.cend())
+                {
+                    it = m_connections.erase(it);
+                    continue;
+                }
+
+                it.value() &= activeIt.value();
+                if (it->isEmpty())
+                    it = m_connections.erase(it);
+                else
+                    ++it;
+            }
+        }
+
         void clear()
         {
             m_connections.clear();

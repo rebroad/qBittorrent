@@ -86,6 +86,24 @@ private slots:
         status.hasProxiedPeerConnections = !connections.isEmpty();
         QCOMPARE(status.connectionStatus(true), BitTorrent::ConnectionStatus::Firewalled);
     }
+
+    void peerSnapshotReconcilesDisconnectedPeer() const
+    {
+        BitTorrent::ProxiedPeerConnectionTracker<QString> connections;
+        BitTorrent::SessionStatus status;
+        const QString torrent = u"torrent-1"_s;
+        const QString peer = u"peer-1"_s;
+
+        connections.add(torrent, peer);
+        status.hasProxiedPeerConnections = !connections.isEmpty();
+        QCOMPARE(status.connectionStatus(true), BitTorrent::ConnectionStatus::Proxied);
+
+        QHash<QString, QSet<QString>> activeConnections;
+        activeConnections.insert(torrent, {});
+        connections.reconcile(activeConnections);
+        status.hasProxiedPeerConnections = !connections.isEmpty();
+        QCOMPARE(status.connectionStatus(true), BitTorrent::ConnectionStatus::Firewalled);
+    }
 };
 
 QTEST_APPLESS_MAIN(TestSessionStatus)
