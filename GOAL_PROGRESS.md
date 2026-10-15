@@ -18,6 +18,7 @@ This file records implementation state and verification evidence for [GOAL.md](G
 - Bigquiet became reachable. The current UPnP helper was copied to `/home/rebroad/bin/upnp_port_setup.py` there; its SHA-256 matches the local source. Relay selection now uses that same helper path on pi3 and bigquiet, with no old-helper compatibility branch.
 - With the existing pi3-failure marker supplied to the automatic selector, it chose bigquiet, moved TCP 54716's router mapping to `192.168.0.10`, installed the bigquiet firewall rule, and removed the stale UDP mapping. `bittorrent-tunnel-verify.sh 54716 bigquiet` passed: the advertised address and qBittorrent settings matched, inbound TCP reached the local qBittorrent listener, router hairpin worked, and the relay service stayed active.
 - After the test, the marker was cleared and the service returned to pi3. `bittorrent-tunnel-verify.sh 54716 pi3` passed with TCP 54716 mapped to `192.168.0.11` and inbound TCP and hairpin checks passing.
+- Rechecked 2026-10-15: bigquiet's `/home/rebroad/bin/upnp_port_setup.py` still has the same SHA-256 as the local helper (`3634df2d…bc564`). The relay script contains only that user-level helper path; there is no old-version compatibility branch. The active relay remains pi3, and `bittorrent-tunnel-verify.sh 54716 pi3` passes for mapping, advertised address, inbound TCP, hairpin, and active lifecycle service.
 
 ## Open verification and gaps
 
