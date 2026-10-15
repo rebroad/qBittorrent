@@ -177,11 +177,18 @@ QString GeoIPDatabase::lookup(const QHostAddress &hostAddr) const
             }
             else
             {
-                const int firstBit = right ? m_recordSize : 0;
-                for (int bit = 0; bit < m_recordSize; ++bit)
+                // In 28-bit nodes, each record's high nibble is packed between its low 24 bits.
+                if (right)
                 {
-                    const int bitOffset = firstBit + bit;
-                    id = (id << 1) | ((ptr[bitOffset / 8] >> (7 - (bitOffset % 8))) & 1);
+                    id = (static_cast<quint32>(ptr[3] & 0xF0) << 20)
+                            | (static_cast<quint32>(ptr[4]) << 16)
+                            | (static_cast<quint32>(ptr[5]) << 8) | ptr[6];
+                }
+                else
+                {
+                    id = (static_cast<quint32>(ptr[3] & 0x0F) << 24)
+                            | (static_cast<quint32>(ptr[0]) << 16)
+                            | (static_cast<quint32>(ptr[1]) << 8) | ptr[2];
                 }
             }
 
