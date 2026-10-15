@@ -46,6 +46,7 @@
 #endif
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QString>
 #include <QThread>
 
@@ -75,6 +76,7 @@ Q_IMPORT_PLUGIN(QICOPlugin)
 #include "base/version.h"
 #include "application.h"
 #include "cmdoptions.h"
+#include "exitreason.h"
 #include "legalnotice.h"
 #include "signalhandler.h"
 
@@ -86,6 +88,12 @@ using namespace std::chrono_literals;
 
 namespace
 {
+    void logProcessExit(const QString &reason, const int status)
+    {
+        recordExitReason(reason);
+        qInfo().noquote() << "qBittorrent process exit:" << reason << "(status" << status << ')';
+    }
+
     void displayBadArgMessage(const QString &message)
     {
         const QString help = QCoreApplication::translate("Main", "Run application with -h option to read about command line parameters.");
@@ -208,12 +216,14 @@ int main(int argc, char *argv[])
         if (params.showHelp)
         {
             displayUsage(QString::fromLocal8Bit(argv[0]));
+            logProcessExit(u"command-line help requested"_s, EXIT_SUCCESS);
             return EXIT_SUCCESS;
         }
 #if !defined(Q_OS_WIN) || defined(DISABLE_GUI)
         if (params.showVersion)
         {
             displayVersion();
+            logProcessExit(u"version information requested"_s, EXIT_SUCCESS);
             return EXIT_SUCCESS;
         }
 #endif
@@ -246,6 +256,7 @@ int main(int argc, char *argv[])
             QThread::msleep(300);
             app->callMainInstance();
 
+            logProcessExit(u"another instance is running; command forwarded"_s, EXIT_SUCCESS);
             return EXIT_SUCCESS;
         }
 
@@ -286,6 +297,7 @@ int main(int argc, char *argv[])
 #if defined(DISABLE_GUI) && !defined(Q_OS_WIN)
         if (params.shouldDaemonize)
         {
+            recordExitReason(u"daemonization requested; the original process is exiting as the daemon child starts"_s);
             app.reset(); // Destroy current application instance
             if (::daemon(1, 0) == 0)
             {
@@ -298,6 +310,7 @@ int main(int argc, char *argv[])
                         .arg(QString::number(QCoreApplication::applicationPid()));
                     LogMsg(errorMessage, Log::CRITICAL);
                     // stdout, stderr is closed so we can't use them
+                    logProcessExit(u"unexpected qBittorrent instance found after daemonization"_s, EXIT_FAILURE);
                     return EXIT_FAILURE;
                 }
             }
@@ -307,6 +320,7 @@ int main(int argc, char *argv[])
                     .arg(QString::fromLocal8Bit(strerror(errno)), QString::number(errno));
                 LogMsg(errorMessage, Log::CRITICAL);
                 qCritical("%s", qUtf8Printable(errorMessage));
+                logProcessExit(u"daemonization failed: "_s + errorMessage, EXIT_FAILURE);
                 return EXIT_FAILURE;
             }
         }
@@ -322,11 +336,26 @@ int main(int argc, char *argv[])
     catch (const CommandLineParameterError &er)
     {
         displayBadArgMessage(er.message());
+        logProcessExit(u"invalid command line: "_s + er.message(), EXIT_FAILURE);
         return EXIT_FAILURE;
     }
     catch (const RuntimeError &er)
     {
         displayErrorMessage(er.message());
+        logProcessExit(u"runtime error: "_s + er.message(), EXIT_FAILURE);
+        return EXIT_FAILURE;
+    }
+    catch (const std::exception &er)
+    {
+        const QString message = QString::fromLocal8Bit(er.what());
+        displayErrorMessage(message);
+        logProcessExit(u"uncaught standard exception: "_s + message, EXIT_FAILURE);
+        return EXIT_FAILURE;
+    }
+    catch (...)
+    {
+        displayErrorMessage(QCoreApplication::translate("Main", "Unknown fatal error."));
+        logProcessExit(u"uncaught non-standard exception; details unavailable"_s, EXIT_FAILURE);
         return EXIT_FAILURE;
     }
 }
