@@ -331,7 +331,12 @@ int main(int argc, char *argv[])
 
         registerSignalHandlers();
 
-        return app->exec();
+        const int exitStatus = app->exec();
+        QString exitReason = app->property("qBittorrentExitReason").toString();
+        if (exitReason.isEmpty())
+            exitReason = u"event loop returned without a recorded exit request; initiator unknown"_s;
+        qInfo().noquote() << "qBittorrent process exit:" << exitReason << "(status" << exitStatus << ')';
+        return exitStatus;
     }
     catch (const CommandLineParameterError &er)
     {

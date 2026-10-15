@@ -147,6 +147,15 @@ namespace
         return !PeerInfo::relayNameForIncomingAddress(peerAddress).isEmpty();
     }
 
+    bool isRelayedIncomingPeer(const lt::peer_info &peer)
+    {
+        if (!(peer.source & lt::peer_info::incoming))
+            return false;
+
+        const QHostAddress peerAddress {QString::fromStdString(peer.ip.address().to_string())};
+        return !PeerInfo::relayNameForIncomingAddress(peerAddress).isEmpty();
+    }
+
     QString peerConnectionKey(const lt::tcp::endpoint &endpoint, const lt::peer_id &peerID)
     {
         const std::string peerIDString = peerID.to_string();
@@ -6347,20 +6356,25 @@ void SessionImpl::handleSessionStatsAlert(const lt::session_stats_alert *alert)
     else
         enqueueRefresh();
 
-    if (!m_proxiedPeerConnections.isEmpty())
+    QHash<lt::torrent_handle, QSet<QString>> activePeerConnections;
+    QHash<lt::torrent_handle, QSet<QString>> relayedPeerConnections;
+    for (const lt::torrent_handle &handle : m_nativeSession->get_torrents())
     {
-        QHash<lt::torrent_handle, QSet<QString>> activePeerConnections;
-        for (const lt::torrent_handle &handle : m_nativeSession->get_torrents())
+        std::vector<lt::peer_info> peers;
+        handle.get_peer_info(peers);
+        auto &peerKeys = activePeerConnections[handle];
+        for (const lt::peer_info &peer : peers)
         {
-            std::vector<lt::peer_info> peers;
-            handle.get_peer_info(peers);
-            auto &peerKeys = activePeerConnections[handle];
-            for (const lt::peer_info &peer : peers)
-                peerKeys.insert(peerConnectionKey(peer.ip, peer.pid));
+            const QString key = peerConnectionKey(peer.ip, peer.pid);
+            peerKeys.insert(key);
+            if (isRelayedIncomingPeer(peer))
+                relayedPeerConnections[handle].insert(key);
         }
-        m_proxiedPeerConnections.reconcile(activePeerConnections);
-        m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
     }
+    // Discover relayed peers from snapshots too: the relay marker may appear
+    // after peer_connect_alert, or alert and snapshot peer keys may differ.
+    m_proxiedPeerConnections.reconcile(activePeerConnections, relayedPeerConnections);
+    m_status.hasProxiedPeerConnections = !m_proxiedPeerConnections.isEmpty();
 
     const int64_t interval = lt::total_microseconds(alert->timestamp() - m_statsLastTimestamp);
     if (interval <= 0)
