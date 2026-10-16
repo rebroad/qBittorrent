@@ -16,6 +16,10 @@ Report `Proxied` while a real peer connection is verified to use the SSH-forward
 
 Keep qBittorrent as the only torrent client for downloads. Use exactly one relay at a time: pi3 is primary and bigquiet is failover. Torrent data and downloaded files stay on this computer. Keep direct local downloads, relay lifecycle integration, router mapping failover, and the TCP/UDP peer and tracker routing requirements already verified in [GOAL_PROGRESS.md](GOAL_PROGRESS.md).
 
+## Secure the relay listener lifecycle
+
+Bind relay-side `socat` only to the LAN address used by the selected relay's UPnP mapping, rather than all interfaces. Ensure the managed listener exits when qBittorrent exits, the relay tunnel fails or stops, or the lifecycle service is stopped; reap stale listeners before waiting for qBittorrent to start. Preserve single-relay selection and pi3-primary/bigquiet-fallback behavior.
+
 ## Completion evidence
 
 - Capture and inspect the original crash with symbols, identify its concrete root cause, and add focused regression coverage.
@@ -24,5 +28,6 @@ Keep qBittorrent as the only torrent client for downloads. Use exactly one relay
 - Verify that an active incoming SSH-forwarded peer is shown as relayed rather than as this host's IP, and that the connection indicator reports `Proxied` only while peer traffic is actually using the relay or peer proxy.
 - Verify the status clears after the relayed/proxied peer disconnects or the path fails, and remains clear for tracker-only proxying.
 - Recheck the relay routing and single-relay behavior recorded in [GOAL_PROGRESS.md](GOAL_PROGRESS.md).
+- Verify `socat` listens only on the selected relay's UPnP-facing address and that no managed listener remains after qBittorrent exits, service stop, or tunnel failure; verify startup also removes the previously orphaned listener.
 
 See [GOAL_PROGRESS.md](GOAL_PROGRESS.md) for implementation status, evidence, and remaining work.
